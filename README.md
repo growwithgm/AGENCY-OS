@@ -56,7 +56,18 @@ npm run dev
 
 **Zaroori:** `MOONSHOT_API_KEY` se pehle Moonshot account par kam az kam $1 top-up (K3 access ki shart). `NEXT_PUBLIC_` prefix kisi secret par kabhi nahi.
 
-Cron: `vercel.json` mein UTC schedules hain (02:00 / Fri 17:00 / 1st 09:00 PKT ke mutabiq). Vercel `CRON_SECRET` env set karein — routes `Authorization: Bearer` bhi accept karte hain.
+### 3. Cron (cron-job.org)
+
+Scheduled kaam cron-job.org se chalte hain, Vercel crons se nahi — poori tafseel aur jobs ki list: [`docs/CRON.md`](docs/CRON.md).
+
+Mukhtasiran: har job `GET` hai, timezone `Asia/Karachi`, aur auth ek header se — `x-cron-secret: <CRON_SECRET>` (URL mein kabhi nahi, wo logs mein reh jata hai). Naya setup `/api/cron/ping` par test karein.
+
+Sab jobs ek saath banane ke liye:
+
+```bash
+CRONJOB_API_KEY=xxx APP_BASE_URL=https://aapka-app.vercel.app CRON_SECRET=yyy \
+  node scripts/setup-cronjobs.mjs --dry-run   # pehle dekh lein
+```
 
 ## MCP — Claude ko connect karna
 
@@ -156,7 +167,7 @@ Content AI likh sakta hai, lekin **bhejne ka faisla hamesha deterministic code k
 
 Sab toggles `/settings` par hain (master switch samet), device list aur test button ke saath.
 
-⚠️ Vercel Hobby plan par sirf 2 cron jobs allowed hain — poora set (8) Pro plan maangta hai, ya kisi bahar ke scheduler se `/api/cron/*` hit karein (`x-cron-secret` header ke saath).
+Cron setup: [`docs/CRON.md`](docs/CRON.md).
 
 ## Client work requests
 

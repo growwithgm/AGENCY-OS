@@ -1,12 +1,4 @@
 {
-  "crons": [
-    { "path": "/api/cron/nightly", "schedule": "0 21 * * *" },
-    { "path": "/api/cron/morning", "schedule": "30 3 * * *" },
-    { "path": "/api/cron/overload", "schedule": "35 3 * * *" },
-    { "path": "/api/cron/evening", "schedule": "0 13 * * *" },
-    { "path": "/api/cron/stale", "schedule": "0 4 * * 1" },
-    { "path": "/api/cron/weekly", "schedule": "0 12 * * 5" },
-    { "path": "/api/cron/report-drafts", "schedule": "5 12 * * 5" },
-    { "path": "/api/cron/monthly", "schedule": "0 4 1 * *" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs"
 }
