@@ -2,6 +2,7 @@ import { requireOperator } from '@/lib/auth';
 import { clientSummaries } from '@/data/clients';
 import { relativePhrase } from '@/lib/format';
 import { NEGLECT_DAYS } from '@/engines/attention/detect';
+import { createClientAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,14 @@ export default async function ClientsPage() {
         </div>
       </div>
 
-      {clients.length === 0 && <div className="card"><p className="muted">No active clients.</p></div>}
+      {clients.length === 0 && (
+        <div className="card">
+          <p className="muted">No clients yet.</p>
+          <p className="tiny dim" style={{ marginTop: 6 }}>
+            Add one below, then give their team portal access from the client&rsquo;s page.
+          </p>
+        </div>
+      )}
 
       {clients.map((client) => {
         const stalePublish = client.daysSincePublished === null
@@ -57,6 +65,24 @@ export default async function ClientsPage() {
           </a>
         );
       })}
+
+      <details style={{ marginTop: 16 }}>
+        <summary className="btn btn--sm" style={{ display: 'inline-flex' }}>Add a client</summary>
+        <form action={createClientAction} className="stack" style={{ marginTop: 12 }}>
+          <label className="field">
+            <span className="label">Name</span>
+            <input name="name" required placeholder="ibBan" className="input" />
+          </label>
+          <label className="field">
+            <span className="label">Portal language</span>
+            <select name="locale" defaultValue="en" className="input">
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+            </select>
+          </label>
+          <button type="submit" className="btn">Add client</button>
+        </form>
+      </details>
     </main>
   );
 }

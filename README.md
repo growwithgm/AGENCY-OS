@@ -35,50 +35,35 @@ Next.js (App Router) · Supabase (Postgres, Auth, RLS) · Vercel · Kimi via
 
 ## Setup
 
-### 1. Database
+Full instructions, including the Supabase dashboard settings:
+[`docs/SETUP.md`](docs/SETUP.md).
 
-Run the migrations in order (`0001` → `0009`). `0007` onwards is written to
-run against a populated database: it adds columns, migrates the old single
-due date into `internal_target`, and never drops data it cannot recreate.
+The short version:
 
-### 2. Environment
+1. Paste [`supabase/schema.sql`](supabase/schema.sql) into the Supabase SQL
+   editor and run it. That one file is the whole database — tables, RLS,
+   portal projections and seed data — and it is idempotent.
+2. Turn on the Email provider, turn **off** email signups, and add
+   `/auth/callback` to the redirect URLs.
+3. `cp .env.example .env.local`, fill it in, `npm install && npm run dev`.
+4. Sign in at `/login` with the address in `OPERATOR_EMAIL`.
+5. Set your hours on `/availability`, add clients on `/clients`, and give
+   their people portal access from each client's page.
 
-```bash
-cp .env.example .env.local
-npm install
-npm run dev
-```
+`supabase/migrations/` holds the same schema as an ordered migration
+history, for an existing database that already has data in it. A fresh
+project only needs `schema.sql`.
 
-`OPERATOR_EMAIL` is the single address allowed to hold an operator session.
-Any other address is rejected when the link is requested, not merely hidden
-afterwards.
-
-`MOONSHOT_API_KEY` is optional. Without it every AI job falls back to a
-deterministic path and the whole system keeps working — see below.
-
-### 3. Push (optional)
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-The public key goes in both `VAPID_PUBLIC_KEY` and
-`NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
-
-### 4. Cron
-
-Two jobs, authenticated with `x-cron-secret`:
-
-| Path | When | What |
-|---|---|---|
-| `/api/cron/nightly` | 02:00 | Generate recurring work, re-plan, refresh signals |
-| `/api/cron/morning` | 08:30 | Push attention signals — only if any are worth pushing |
-
-`/api/cron/ping` proves the secret works without doing anything.
+Two cron jobs, authenticated with `x-cron-secret`: `/api/cron/nightly`
+(02:00) generates recurring work, re-plans and refreshes signals;
+`/api/cron/morning` (08:30) pushes attention signals, but only when any are
+worth pushing. `/api/cron/ping` proves the secret works without doing
+anything.
 
 ## Authentication
 
-Two identities, both magic-link, both through RLS.
+Supabase Auth, magic links, no passwords anywhere. Two identities, both
+through RLS.
 
 **Operator** — one allowlisted address. The role lives in the JWT's
 `app_metadata`, which only the service-role key can write, so it cannot be

@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { supabaseServer } from '@/lib/supabase/server';
 import { env } from '@/lib/env';
 import { hashIdentifier, rateLimit } from '@/lib/rateLimit';
 import { recordAudit } from '@/lib/audit';
@@ -104,14 +104,15 @@ export async function sendMagicLink(req: LinkRequest): Promise<LinkResult> {
     identity.role === 'owner' ? encodeURIComponent('/') : encodeURIComponent('/portal')
   }`;
 
-  // Sent with the anon key: the admin client would generate a link without
-  // delivering it. shouldCreateUser is false — ensureUser already decided
-  // who is allowed to exist.
-  const anon = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-    auth: { persistSession: false },
-  });
+  // Sent through the cookie-backed server client, not a bare anon client.
+  //
+  // Supabase uses PKCE: signInWithOtp mints a code verifier that must be
+  // stored in the caller's cookies, because /auth/callback needs it to
+  // exchange the code for a session. A throwaway client would keep that
+  // verifier in memory and drop it, and every link would fail on arrival.
+  const supabase = await supabaseServer();
 
-  const { error } = await anon.auth.signInWithOtp({
+  const { error } = await supabase.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
   });

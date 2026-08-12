@@ -192,7 +192,26 @@ export default async function AvailabilityPage() {
 
       <div className="section-label"><span>Notifications</span></div>
       <NotificationSettings />
+
+      <div className="section-label"><span>Session</span></div>
+      <SessionCard />
     </main>
+  );
+}
+
+async function SessionCard() {
+  const { session } = await requireOperator();
+
+  return (
+    <div className="card">
+      <p className="small muted">
+        Signed in as <strong style={{ color: 'var(--text)' }}>{session.email}</strong> — the
+        one address allowed to hold an operator session.
+      </p>
+      <form action="/signout" method="post" style={{ marginTop: 10 }}>
+        <button type="submit" className="btn btn--sm">Sign out</button>
+      </form>
+    </div>
   );
 }
 

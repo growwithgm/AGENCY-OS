@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireOperator } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createDraft, editDraft, publishUpdate } from '@/data/updates';
 import { listWork } from '@/data/work';
 import { getClient } from '@/data/clients';
@@ -78,4 +79,87 @@ export async function publishUpdateAction(form: FormData) {
   await publishUpdate(supabase, id, session.email);
   revalidatePath(`/clients/${clientId}`);
   revalidatePath('/clients');
+}
+
+/** Add a client. The slug is derived, not asked for — one less field. */
+export async function createClientAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const name = String(form.get('name') ?? '').trim();
+  if (!name) throw new Error('a client name is required');
+
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+    || `client-${Date.now()}`;
+
+  const { error } = await supabase.from('clients').insert({
+    name,
+    brand_slug: slug,
+    locale: String(form.get('locale') ?? 'en'),
+    status: 'active',
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/clients');
+}
+
+/**
+ * Give someone at the client access to their portal.
+ *
+ * The contact row is the whole allowlist: an address that is not here
+ * gets the same "check your email" screen and no link. Adding one does
+ * not send anything — they sign in whenever they choose to.
+ */
+export async function addContactAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const clientId = String(form.get('client_id') ?? '');
+  const email = String(form.get('email') ?? '').trim().toLowerCase();
+  if (!clientId || !email.includes('@')) throw new Error('a valid email address is required');
+
+  const { error } = await supabase.from('client_contacts').insert({
+    client_id: clientId,
+    email,
+    name: String(form.get('name') ?? '').trim() || null,
+    active: true,
+  });
+
+  // A unique violation means the address already belongs to a client.
+  if (error) {
+    throw new Error(
+      error.code === '23505'
+        ? 'That email address already has portal access, possibly for another client.'
+        : error.message,
+    );
+  }
+
+  revalidatePath(`/clients/${clientId}`);
+}
+
+/**
+ * Revoke portal access.
+ *
+ * Deleting the contact is not enough on its own: an already-issued session
+ * would keep working until it expired. The auth user is deleted too, which
+ * ends every session that address holds.
+ */
+export async function removeContactAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const contactId = String(form.get('contact_id') ?? '');
+  const clientId = String(form.get('client_id') ?? '');
+  if (!contactId) throw new Error('contact_id is required');
+
+  const { data: contact } = await supabase.from('client_contacts')
+    .select('email').eq('id', contactId).maybeSingle();
+
+  await supabase.from('client_contacts').delete().eq('id', contactId);
+
+  if (contact?.email) {
+    const admin = supabaseAdmin();
+    const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const user = list?.users.find((u) => u.email?.toLowerCase() === contact.email.toLowerCase());
+    if (user) await admin.auth.admin.deleteUser(user.id);
+  }
+
+  revalidatePath(`/clients/${clientId}`);
 }

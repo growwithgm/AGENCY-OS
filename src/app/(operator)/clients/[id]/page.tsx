@@ -15,7 +15,10 @@ import { listUpdates } from '@/data/updates';
 import { requestsForClient } from '@/data/requests';
 import { STATUS_LABELS, type WorkStatus } from '@/data/types';
 import { hmShort, relativePhrase, shortDate } from '@/lib/format';
-import { draftUpdateAction, publishUpdateAction, saveUpdateAction } from '../actions';
+import {
+  addContactAction, draftUpdateAction, publishUpdateAction,
+  removeContactAction, saveUpdateAction,
+} from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -182,20 +185,52 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         {contacts.length === 0 && (
           <div className="rows__row">
             <span className="small dim">
-              No contact emails — nobody at {client.name} can sign in yet.
+              No contact emails yet — nobody at {client.name} can sign in.
             </span>
           </div>
         )}
         {contacts.map((contact) => (
           <div key={contact.id} className="rows__row">
-            <span>{contact.email}</span>
-            <span className="tiny dim num">
-              {contact.last_login_at ? relativePhrase(contact.last_login_at.slice(0, 10)) : 'never signed in'}
+            <span className="small">
+              {contact.email}
+              <span className="tiny dim" style={{ display: 'block' }}>
+                {contact.last_login_at
+                  ? `Last signed in ${relativePhrase(contact.last_login_at.slice(0, 10))}`
+                  : 'Never signed in'}
+              </span>
             </span>
+            <form action={removeContactAction}>
+              <input type="hidden" name="contact_id" value={contact.id} />
+              <input type="hidden" name="client_id" value={client.id} />
+              <button type="submit" className="btn btn--sm btn--quiet">Revoke</button>
+            </form>
           </div>
         ))}
       </div>
-      <p className="tiny dim" style={{ marginTop: 8 }}>
+
+      <form action={addContactAction} className="stack" style={{ marginTop: 10 }}>
+        <input type="hidden" name="client_id" value={client.id} />
+        <div className="row" style={{ gap: 8 }}>
+          <label className="field" style={{ flex: '2 1 200px' }}>
+            <span className="label">Email address</span>
+            <input name="email" type="email" required placeholder="laura@ibban.com" className="input" />
+          </label>
+          <label className="field" style={{ flex: '1 1 140px' }}>
+            <span className="label">Name (optional)</span>
+            <input name="name" className="input" />
+          </label>
+        </div>
+        <button type="submit" className="btn btn--sm" style={{ alignSelf: 'flex-start' }}>
+          Give portal access
+        </button>
+      </form>
+
+      <p className="tiny dim" style={{ marginTop: 10 }}>
+        They sign in with a link sent to that address — no password, and no account for
+        them to create. Adding an address sends nothing; they sign in when they choose.
+        Revoking removes their access immediately, including any session already open.
+      </p>
+      <p className="tiny dim" style={{ marginTop: 6 }}>
         Clients see only published updates and work you marked visible. They never see
         internal dates, estimates or priorities.
       </p>
