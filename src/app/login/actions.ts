@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { sendMagicLink, signInOperator } from '@/lib/authFlow';
 
 export type LoginState = { stage: 'idle' | 'sent' | 'throttled'; email?: string };
-export type PasswordState = { stage: 'idle' | 'wrong' | 'throttled' | 'unavailable' };
+export type PasswordState = { stage: 'idle' | 'wrong' | 'throttled' };
 
 async function callerIp(): Promise<string | null> {
   const h = await headers();
@@ -14,20 +14,19 @@ async function callerIp(): Promise<string | null> {
 }
 
 /**
- * Always reports "sent", whether or not the address is known.
- * Confirming that an address is registered is itself a disclosure, and the
- * user list here is one operator and a handful of client contacts.
+ * Client portal links. Always reports "sent", whether or not the address is
+ * known — confirming that an address is registered is itself a disclosure,
+ * and the user list here is a handful of client contacts.
  */
 export async function requestLinkAction(
   _prev: LoginState,
   form: FormData,
 ): Promise<LoginState> {
   const email = String(form.get('email') ?? '').trim();
-  const audience = form.get('audience') === 'client' ? 'client' as const : 'operator' as const;
 
   if (!email) return { stage: 'idle' };
 
-  const result = await sendMagicLink({ email, ip: await callerIp(), audience });
+  const result = await sendMagicLink({ email, ip: await callerIp() });
 
   if (result.rateLimited) return { stage: 'throttled', email };
   return { stage: 'sent', email };

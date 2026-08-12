@@ -4,16 +4,10 @@ import { useActionState } from 'react';
 import { requestLinkAction, type LoginState } from './actions';
 
 /**
- * Shared by both sign-in screens. The "sent" state is reassurance, not
- * instructions, and it looks identical for an unknown address.
+ * Client portal sign-in. The "sent" state is reassurance, not instructions,
+ * and it looks identical for an unknown address.
  */
-export function LoginForm({
-  audience,
-  serif = false,
-}: {
-  audience: 'operator' | 'client';
-  serif?: boolean;
-}) {
+export function LoginForm({ serif = false }: { serif?: boolean }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(
     requestLinkAction,
     { stage: 'idle' },
@@ -33,7 +27,6 @@ export function LoginForm({
           Nothing arrived? Check spam, then request another link.
         </p>
         <form action={action} style={{ marginTop: 14 }}>
-          <input type="hidden" name="audience" value={audience} />
           <input type="hidden" name="email" value={state.email ?? ''} />
           <button type="submit" className="btn" disabled={pending}>
             {pending ? 'Sending…' : 'Send it again'}
@@ -45,7 +38,6 @@ export function LoginForm({
 
   return (
     <form action={action} className="stack">
-      <input type="hidden" name="audience" value={audience} />
       <label className="sr-only" htmlFor="email">Email address</label>
       <input
         id="email"

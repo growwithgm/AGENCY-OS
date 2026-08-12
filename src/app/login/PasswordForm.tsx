@@ -6,7 +6,6 @@ import { signInAction, type PasswordState } from './actions';
 const MESSAGES: Record<Exclude<PasswordState['stage'], 'idle'>, string> = {
   wrong: 'That email or password is not right.',
   throttled: 'Too many attempts. Wait fifteen minutes.',
-  unavailable: 'Password sign-in is not available on this deployment.',
 };
 
 /**

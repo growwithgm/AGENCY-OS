@@ -22,7 +22,7 @@ export default async function PortalLoginPage() {
         Enter your email and we&rsquo;ll send you a link. No password to remember.
       </p>
 
-      <LoginForm audience="client" serif />
+      <LoginForm serif />
     </main>
   );
 }

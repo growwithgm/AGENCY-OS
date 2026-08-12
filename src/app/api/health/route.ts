@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import {
-  configStatus,
-  operatorPasswordConfigured,
-  operatorPasswordTooShort,
-  MIN_OPERATOR_PASSWORD_LENGTH,
-} from '@/lib/env';
+import { configStatus } from '@/lib/env';
 
 /**
  * Deployment check.
@@ -21,12 +16,9 @@ export async function GET() {
     ok: config.ok,
     missing_required: config.missing,
     features_off: config.degraded,
-    operator_signin: operatorPasswordConfigured() ? 'password' : 'email_link',
-    warnings: operatorPasswordTooShort()
-      ? [`OPERATOR_PASSWORD is shorter than ${MIN_OPERATOR_PASSWORD_LENGTH} characters and is being ignored — sign-in has fallen back to an emailed link.`]
-      : [],
+    operator_signin: 'supabase_password',
     note: config.ok
-      ? 'Configured. If sign-in still fails, check the Supabase redirect URL.'
+      ? 'Configured. The operator password is the Supabase Auth user’s password, managed in the Supabase dashboard.'
       : 'Add the missing variables in your host, then redeploy — values added after a build do not reach a running app.',
   }, { status: config.ok ? 200 : 503 });
 }

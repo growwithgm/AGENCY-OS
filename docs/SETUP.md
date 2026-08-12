@@ -31,10 +31,17 @@ Check it worked: **Table Editor** should now list `clients`, `tasks`,
 
 The two sides sign in differently, on purpose:
 
-- **You** (the agency side) sign in with a **password** — set
-  `OPERATOR_PASSWORD` below and there is no email in the loop at all.
+- **You** (the agency side) sign in with **email and password** — the
+  Supabase Auth user itself, exactly like signing in to Supabase. No email
+  in the loop.
 - **Clients** sign in with an emailed link. Nothing to remember, nothing to
   reset, and access can be revoked instantly by removing the address.
+
+**Create your own user** — Supabase dashboard → **Authentication → Users →
+Add user**: enter the address you will put in `OPERATOR_EMAIL` and choose a
+password. That password is your sign-in; change it any time from the same
+place. (If the user already exists without a password, delete it and add it
+again with one.)
 
 **Authentication → Providers → Email**
 
@@ -86,7 +93,6 @@ for the first two, so an older deployment does not need renaming.
 
 | Variable | Missing means |
 |---|---|
-| `OPERATOR_PASSWORD` | You sign in with an emailed link instead of a password. Set it — invent a password of **at least 10 characters**. Anything shorter is ignored and you fall back to links without being told. |
 | `MOONSHOT_API_KEY` | Every AI job uses its deterministic fallback |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No push notifications. Generate with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` is `mailto:you@example.com` |
 | `APP_URL` | Falls back to the Vercel deployment URL. `APP_BASE_URL` is accepted as the older name. |
@@ -120,33 +126,34 @@ because the allowlist is re-checked on every request, not only at sign-in.
 
 1. Deploy, or run `npm run dev`.
 2. Go to `/login`.
-3. Enter the address in `OPERATOR_EMAIL` and the password in
-   `OPERATOR_PASSWORD` — the familiar two-field screen.
+3. Enter the email and password of your Supabase user — the one you created
+   in step 2, whose address is `OPERATOR_EMAIL`.
 
 You stay signed in on that device; the session refreshes itself in the
 background, so this is a one-time cost per browser, not a daily one.
 
-Nothing needs creating in the Supabase dashboard first. On that first
-sign-in the app creates the auth user (or repairs one you made by hand),
-sets its password to `OPERATOR_PASSWORD` and stamps it with `role: owner`
-in `app_metadata`, which only the service-role key can write. That claim is
-what row level security reads, so the role cannot be forged by the user it
-describes.
+**The password lives in Supabase, not in this app.** The app never stores
+or learns it — Supabase verifies it, the same check as signing in to
+Supabase itself. Change it from the dashboard (Authentication → Users →
+your user) and the old one stops working.
 
-**`OPERATOR_PASSWORD` is the password.** Change it in your host's settings
-and redeploy, and the old one stops working — there is nothing to update in
-Supabase, and no "forgot password" flow to get stuck in.
+What the app does add, on each successful sign-in, is the `role: owner`
+claim in `app_metadata` — writable only by the service-role key, which is
+why a user you created by hand works without any extra clicking. That claim
+is what row level security reads, so the role cannot be forged by the user
+it describes. Only the `OPERATOR_EMAIL` address gets it; any other user
+signing in here is rejected before the password is even checked.
 
 If sign-in fails:
 
 | Symptom | Cause |
 |---|---|
-| "That email or password is not right" | What you typed differs from `OPERATOR_EMAIL` / `OPERATOR_PASSWORD` — a trailing space in a variable is the usual culprit. Or the variables were added after the last build: redeploy. |
-| The screen has no password field | `OPERATOR_PASSWORD` is unset or shorter than 10 characters. `/api/health` says which. |
+| "That email or password is not right" | The pair does not match the Supabase user — or the email is not `OPERATOR_EMAIL`, which gets the same answer on purpose. If the user was created without a password, delete it in the dashboard and add it again with one. |
 | "Too many attempts" | Ten wrong guesses in fifteen minutes from one place. Wait it out. |
+| Every page says "not configured" | Variables were added after the last build. Redeploy, then check `/api/health`. |
 
-Client sign-in is unchanged and needs no password: they enter their email
-at `/portal/login` and open the link.
+Client sign-in needs no password: they enter their email at
+`/portal/login` and open the link.
 
 ---
 
