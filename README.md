@@ -13,9 +13,9 @@ Canonical spec: [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) — code comments `spec
 Claude (MCP) ──► /api/mcp ──┐
                             ├──► Next.js + Supabase (Postgres + RLS)
 Operator ──► Web app ───────┘      · deterministic scheduler
-                                   · runAI() → Kimi (sirf report drafts)
+                                   · runAI() → Kimi (briefing, advice, reports)
 Client ──► /c/<token> portal (read-only, RLS-scoped JWT)
-Cron  ──► /api/cron/{nightly,weekly,monthly}
+Cron  ──► /api/cron/*  (schedule rebuild, report drafts, notifications)
 ```
 
 Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek tez raasta hai: baat-cheet se task banana, edit karna, schedule dekhna.
@@ -27,15 +27,15 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 | `supabase/migrations/` | Schema, RLS policies, seed |
 | `src/scheduler/` | Deterministic engine (slots, topo-sort, scoring, first-fit, overflow) + tests + read models |
 | `src/tasks/` | Shared task operations — MCP aur web dono yahi call karte hain |
-| `src/mcp/` + `src/app/api/mcp/` | MCP server (8 tools) |
+| `src/mcp/` + `src/app/api/mcp/` | MCP server (14 tools) |
 | `src/briefing/` | Deterministic briefing data + at_risk/stale classification (tests ke saath) |
 | `src/ai/` | `runAI()` wrapper, `jobs.config.ts` (model/effort/tokens), prompts, judgement layer, cache |
 | `src/push/` | Web Push delivery, send policy (tested), notification triggers |
 | `src/requests/` | Client work requests — rate limits, injection defence, approval (tested) |
 | `src/reporting/` | Draft generation (task history se) + approval |
 | `src/jobs/` | Job queue worker |
-| `src/app/api/cron/` | Nightly / weekly / monthly |
-| `src/app/` | Dashboard, task CRUD, report review/approve |
+| `src/app/api/cron/` | Schedule rebuild, report drafts, notification triggers |
+| `src/app/` | Dashboard, task CRUD, requests queue, report approve, settings |
 | `src/app/c/[token]/` | Client portal — token → scoped JWT → har query RLS se |
 
 ## Setup
@@ -43,7 +43,7 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 ### 1. Database (Supabase)
 
 ```bash
-supabase db push   # ya SQL editor mein 0001 → 0003
+supabase db push   # ya SQL editor mein 0001 → 0006, tarteeb se
 ```
 
 ### 2. Web app
@@ -115,10 +115,13 @@ Do hisse hain:
 |---|---|---|---|
 | `daily_briefing` | kimi-k3 | low | Dashboard par, roz ek dafa |
 | `overload_advice` | kimi-k3 | high | Sirf jab overflow ya at_risk ho |
-| `ask_advice` | kimi-k3 | low | `ask_advice` tool call par |
+| `ask_advice` | kimi-k3 | high | `ask_advice` tool call par |
 | `estimate_insight` | kimi-k2.5 | — | Hafta-war (weekly cron) |
+| `clarify_client_request` | kimi-k2.5 | — | Client portal par request ke sawal |
 
 **Report drafts** — `weekly_report` (k3, low) aur `monthly_report` (k3, high), sirf task history se.
+
+Har job ka model, effort aur token cap ek file mein hai: `src/ai/jobs.config.ts`. Koi job `max` effort istemal nahi karta — ek test isay enforce karta hai.
 
 AI ko sirf taiyar JSON milta hai — wo khud DB query nahi karta. Classification (at_risk, stale, overflow, capacity) deterministic code mein hai aur tested hai. AI schedule badalne ki **tajweez** de sakta hai, schedule **bana** nahi sakta.
 
