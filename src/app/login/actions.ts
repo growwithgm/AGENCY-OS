@@ -34,16 +34,15 @@ export async function requestLinkAction(
 }
 
 /**
- * Operator sign-in with a password. One field, one submit, straight to Today.
- * The address is not asked for — there is only ever one, and it is already
- * in the environment.
+ * Operator sign-in: email and password, one submit, straight to Today.
  */
 export async function signInAction(
   _prev: PasswordState,
   form: FormData,
 ): Promise<PasswordState> {
+  const email = String(form.get('email') ?? '');
   const password = String(form.get('password') ?? '');
-  const result = await signInOperator(password, await callerIp());
+  const result = await signInOperator(email, password, await callerIp());
 
   if (result.ok) redirect('/');
   return { stage: result.reason };

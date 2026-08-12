@@ -169,16 +169,20 @@ async function syncOperatorUser(email: string, password: string): Promise<void> 
 }
 
 /**
- * Sign the operator in with a password. No email, no link, no waiting.
+ * Sign the operator in with email and password — the familiar two-field
+ * screen. No email in the loop, no link, no waiting.
  *
- * The address is not asked for: there is exactly one operator address and it
- * lives in the environment, so typing it every time is ceremony. The password
- * is checked against OPERATOR_PASSWORD here first, and only a correct one
- * causes any write — a wrong guess touches nothing but the rate limiter.
+ * The password is checked against OPERATOR_PASSWORD here first, and only a
+ * correct pair causes any write — a wrong guess touches nothing but the
+ * rate limiter. Which of the two fields was wrong is never disclosed.
  */
-export async function signInOperator(password: string, ip: string | null): Promise<PasswordResult> {
+export async function signInOperator(
+  emailInput: string,
+  password: string,
+  ip: string | null,
+): Promise<PasswordResult> {
   if (!operatorPasswordConfigured()) return { ok: false, reason: 'unavailable' };
-  if (!password) return { ok: false, reason: 'wrong' };
+  if (!password || !emailInput) return { ok: false, reason: 'wrong' };
 
   // Two limits: one per source, and one across all sources, so a spread-out
   // attempt is bounded even though no single address stands out.
@@ -189,8 +193,17 @@ export async function signInOperator(password: string, ip: string | null): Promi
 
   if (!byIp.allowed || !overall.allowed) return { ok: false, reason: 'throttled' };
 
-  if (!secretsMatch(password, env.OPERATOR_PASSWORD)) {
-    await recordAudit({ type: 'signin_rejected', note: 'wrong operator password' });
+  // Both are compared before either verdict is given: the email check is the
+  // same allowlist the link flow enforces, and folding it into one answer
+  // avoids confirming that an address is the operator's.
+  const emailOk = emailInput.trim().toLowerCase() === env.OPERATOR_EMAIL;
+  const passwordOk = secretsMatch(password, env.OPERATOR_PASSWORD);
+
+  if (!emailOk || !passwordOk) {
+    await recordAudit({
+      type: 'signin_rejected',
+      note: emailOk ? 'wrong operator password' : 'address is not the allowlisted operator',
+    });
     return { ok: false, reason: 'wrong' };
   }
 

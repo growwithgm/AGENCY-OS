@@ -120,9 +120,8 @@ because the allowlist is re-checked on every request, not only at sign-in.
 
 1. Deploy, or run `npm run dev`.
 2. Go to `/login`.
-3. Type the password you put in `OPERATOR_PASSWORD`. That is the whole
-   screen — there is no email field, because there is only one operator
-   address and the server already knows it.
+3. Enter the address in `OPERATOR_EMAIL` and the password in
+   `OPERATOR_PASSWORD` — the familiar two-field screen.
 
 You stay signed in on that device; the session refreshes itself in the
 background, so this is a one-time cost per browser, not a daily one.
@@ -142,8 +141,8 @@ If sign-in fails:
 
 | Symptom | Cause |
 |---|---|
-| "That password is not right" | The value in `OPERATOR_PASSWORD` differs from what you typed — a trailing space in the variable is the usual culprit. Or the variable was added after the last build: redeploy. |
-| The screen asks for an email, not a password | `OPERATOR_PASSWORD` is unset or shorter than 10 characters. `/api/health` says which. |
+| "That email or password is not right" | What you typed differs from `OPERATOR_EMAIL` / `OPERATOR_PASSWORD` — a trailing space in a variable is the usual culprit. Or the variables were added after the last build: redeploy. |
+| The screen has no password field | `OPERATOR_PASSWORD` is unset or shorter than 10 characters. `/api/health` says which. |
 | "Too many attempts" | Ten wrong guesses in fifteen minutes from one place. Wait it out. |
 
 Client sign-in is unchanged and needs no password: they enter their email

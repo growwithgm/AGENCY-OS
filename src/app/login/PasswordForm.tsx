@@ -4,16 +4,15 @@ import { useActionState } from 'react';
 import { signInAction, type PasswordState } from './actions';
 
 const MESSAGES: Record<Exclude<PasswordState['stage'], 'idle'>, string> = {
-  wrong: 'That password is not right.',
+  wrong: 'That email or password is not right.',
   throttled: 'Too many attempts. Wait fifteen minutes.',
   unavailable: 'Password sign-in is not available on this deployment.',
 };
 
 /**
- * The whole agency-side sign-in: one field.
- *
- * There is exactly one operator address and the server already knows it, so
- * asking for it here would be typing for its own sake.
+ * The agency-side sign-in: email and password, the familiar pair.
+ * Which of the two was wrong is never disclosed — the answer would confirm
+ * the operator's address to whoever is guessing.
  */
 export function PasswordForm() {
   const [state, action, pending] = useActionState<PasswordState, FormData>(
@@ -23,13 +22,24 @@ export function PasswordForm() {
 
   return (
     <form action={action} className="stack">
+      <label className="sr-only" htmlFor="email">Email address</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        required
+        autoFocus
+        autoComplete="username"
+        inputMode="email"
+        placeholder="you@example.com"
+        className="input"
+      />
       <label className="sr-only" htmlFor="password">Password</label>
       <input
         id="password"
         name="password"
         type="password"
         required
-        autoFocus
         autoComplete="current-password"
         placeholder="Password"
         className="input"

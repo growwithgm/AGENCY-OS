@@ -30,7 +30,7 @@ export default async function LoginPage({
       <h1 className="page-title" style={{ marginTop: 8 }}>Sign in</h1>
       <p className="muted" style={{ marginTop: 8, marginBottom: 24 }}>
         {byPassword
-          ? 'Enter your password. You stay signed in on this device.'
+          ? 'Enter your email and password. You stay signed in on this device.'
           : 'Enter your email and we’ll send you a link.'}
       </p>
 
