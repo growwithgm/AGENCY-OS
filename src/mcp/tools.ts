@@ -11,6 +11,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { db } from '@/lib/db';
 import { overflowTasks, scheduleBlocks, totalMinutes } from '@/scheduler/view';
+import { buildBriefing } from '@/briefing/data';
+import { askAdviceText, cachedDailyBriefing } from '@/ai/judgement';
 import {
   addBlackout, blockTask, clientBySlug, completeTask,
   createTask, findOpenTask, updateTask,
@@ -106,6 +108,34 @@ export function registerTools(server: McpServer): void {
       overflow,
     });
   });
+
+  server.registerTool('get_briefing', {
+    description:
+      'Aaj ka poora picture ek jagah: today ke blocks, at_risk, blocked, stale tasks, ' +
+      'overflow, agle 14 din ki capacity, aur har client ka retainer usage + pichla report. ' +
+      'Ye sab deterministic hai. narrative=true do to saath ek chhoti AI briefing bhi aayegi ' +
+      '(roz ek dafa generate hoti hai, phir cache se). Din shuru karte waqt yahi tool chalao.',
+    inputSchema: {
+      narrative: z.boolean().optional()
+        .describe('default false. true = AI ki likhi briefing bhi saath'),
+    },
+  }, async ({ narrative }) => guard(async () => {
+    if (!narrative) return buildBriefing();
+    const { content, generated_at, briefing } = await cachedDailyBriefing();
+    return { narrative: content, narrative_generated_at: generated_at, ...briefing };
+  }));
+
+  server.registerTool('ask_advice', {
+    description:
+      'Aaj ke plan ke data par ek sawal poochho — misal: "is hafte kya kaatun", ' +
+      '"kaunsa client ignore ho raha hai", "kya main Friday tak deliver kar paunga". ' +
+      'Jawab sirf mojood data par bunta hai; agar data mein jawab na ho to saaf bata dega. ' +
+      'Ye tajweez deta hai — schedule nahi badalta aur priority tay nahi karta.',
+    inputSchema: { question: z.string().describe('Operator ka sawal') },
+  }, async ({ question }) => guard(async () => {
+    const briefing = await buildBriefing();
+    return askAdviceText(briefing, question);
+  }));
 
   // ── WRITE ─────────────────────────────────────────────────────────
 

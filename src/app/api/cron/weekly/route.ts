@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isCronAuthorized } from '@/lib/apiAuth';
 import { db } from '@/lib/db';
 import { enqueue, drainJobs } from '@/jobs/worker';
+import { cachedEstimateInsight } from '@/ai/judgement';
 
 export const maxDuration = 300;
 
 /**
- * Friday 17:00 PKT: weekly draft per active client. Idempotent.
+ * Friday 17:00 PKT: weekly draft per active client, plus the weekly
+ * estimate-accuracy insight. Idempotent.
  * Drafts wait on the web app for review + approval (invariant 3).
  */
 export async function GET(req: NextRequest) {
@@ -30,5 +32,15 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await drainJobs(queued + 5);
-  return NextResponse.json({ ok: true, queued, ...result });
+
+  // estimate insight is advisory only — it never rewrites estimates
+  let estimateInsight = false;
+  try {
+    await cachedEstimateInsight();
+    estimateInsight = true;
+  } catch {
+    // best-effort: a failed insight must not fail the report run
+  }
+
+  return NextResponse.json({ ok: true, queued, estimateInsight, ...result });
 }

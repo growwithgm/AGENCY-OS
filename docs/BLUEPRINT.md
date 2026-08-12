@@ -96,16 +96,39 @@ Backend mein koi capture state machine nahi hai. Operator Claude se baat karta h
 
 Ye qawaneen tool descriptions mein likhe hain (`src/mcp/tools.ts`), taake har MCP client par lagoo hon.
 
-### AI report jobs (Kimi)
+### AI jobs (Kimi)
 
-System mein sirf **do** LLM jobs hain:
+| Job | Model | effort | Input | Kaam |
+|---|---|---|---|---|
+| `daily_briefing` | `kimi-k3` | low | `get_briefing` JSON | 100-150 alfaz ki briefing |
+| `overload_advice` | `kimi-k3` | high | overflow + at_risk + capacity + client context | 2-3 options, har ek mein trade-off |
+| `ask_advice` | `kimi-k3` | low | briefing JSON + operator ka sawal | Seedha jawab |
+| `estimate_insight` | `kimi-k2.5` | — | 30 din ka est vs actual | Kahan andaza ghalat hota hai |
+| `weekly_report` | `kimi-k3` | low | task history | Client draft |
+| `monthly_report` | `kimi-k3` | high | task history | Client draft |
 
-| Job | Model | reasoning_effort |
-|---|---|---|
-| Weekly report | `kimi-k3` | `low` |
-| Monthly report | `kimi-k3` | `high` |
+### Judgement layer ka usool
 
-Dono sirf task history par likhte hain — koi metrics, koi numbers invent nahi.
+AI ko sirf `buildBriefing()` ka taiyar-shuda JSON milta hai — wo khud database
+query nahi karta. Classification (at_risk, stale, overflow, capacity) poori
+tarah deterministic hai (`src/briefing/classify.ts`, tests ke saath); AI us par
+sirf raye deta hai.
+
+- `at_risk` = deadline aur plan mein ikhtilaf: **overdue** (waqt guzar gaya),
+  **unscheduled** (deadline hai magar plan mein jagah nahi), ya
+  **scheduled_past_due** (plan deadline ke baad khatam karta hai)
+- `stale` = 14 din se backlog mein para task jise koi deadline nahi utha rahi
+
+AI schedule badalne ki **tajweez** de sakta hai, schedule **bana** nahi sakta.
+`overload_advice` sirf tab chalta hai jab waqai overflow ya at_risk mojood ho.
+
+### Caching
+
+Briefing aur overload advice roz **ek dafa** bante hain (`ai_cache` table,
+key = date), phir cache se aate hain. Dashboard par refresh button aaj ka
+cache gira deta hai. Estimate insight hafta-war (key = ISO week), weekly
+cron se. Provider down ho to dashboard ka deterministic hissa phir bhi
+render hota hai — AI card apni ghalti khud dikhata hai.
 
 ---
 
@@ -125,15 +148,15 @@ Dono sirf task history par likhte hain — koi metrics, koi numbers invent nahi.
 
 `/api/mcp` par Streamable HTTP MCP server. Auth: `MCP_SECRET` (Bearer header, `x-mcp-secret`, ya `?key=` query claude.ai connectors ke liye). Secret unset = endpoint band.
 
-**Tools (8):**
+**Tools (10):**
 
 | Read | Write |
 |---|---|
 | `list_clients` | `create_task` (priority required) |
 | `list_tasks` | `update_task` |
 | `get_schedule` (overflow samet) | `complete_task` |
-| | `block_task` |
-| | `add_blackout` |
+| `get_briefing(narrative?)` | `block_task` |
+| `ask_advice(question)` | `add_blackout` |
 
 Har write ke baad scheduler rebuild hota hai.
 
@@ -161,7 +184,7 @@ Delivery ka waahid channel **portal** hai: approve hote hi report RLS ke zariye 
 | Job | Waqt | Kaam |
 |---|---|---|
 | nightly | 02:00 | schedule rebuild; overdue tasks par `needs_review` flag; job queue drain |
-| weekly | Fri 17:00 | har active client ka weekly draft |
+| weekly | Fri 17:00 | har active client ka weekly draft; estimate insight |
 | monthly | 1st 09:00 | har active client ka monthly draft |
 
 Idempotent; `x-cron-secret` header (ya Vercel cron ka Bearer) auth.
@@ -170,6 +193,8 @@ Idempotent; `x-cron-secret` header (ya Vercel cron ka Bearer) auth.
 
 ## 14. System Invariants
 
+0. **AI kabhi `schedule_blocks` nahi likhta.** Judgement layer sirf parhta hai
+   aur tajweez deta hai; placement `scheduler/engine.ts` ka kaam hai.
 1. AI scheduling ki math nahi karta.
 2. Priority AI kabhi tay nahi karta — hamesha operator chunta hai. Task banane se pehle tasdeeq lazmi.
 3. Koi report bina `approved` client tak nahi jati; approval sirf web par hai.

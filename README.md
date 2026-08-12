@@ -28,7 +28,8 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 | `src/scheduler/` | Deterministic engine (slots, topo-sort, scoring, first-fit, overflow) + tests + read models |
 | `src/tasks/` | Shared task operations — MCP aur web dono yahi call karte hain |
 | `src/mcp/` + `src/app/api/mcp/` | MCP server (8 tools) |
-| `src/ai/` | `runAI()` wrapper + report prompts — sirf do LLM jobs |
+| `src/briefing/` | Deterministic briefing data + at_risk/stale classification (tests ke saath) |
+| `src/ai/` | `runAI()` wrapper, prompts, judgement layer, daily/weekly cache |
 | `src/reporting/` | Draft generation (task history se) + approval |
 | `src/jobs/` | Job queue worker |
 | `src/app/api/cron/` | Nightly / weekly / monthly |
@@ -86,11 +87,13 @@ claude mcp add --transport http agency-os https://<aapka-app>.vercel.app/api/mcp
 }
 ```
 
-### Tools (8)
+### Tools (10)
 
-**Read:** `list_clients`, `list_tasks`, `get_schedule` (overflow samet)
+**Read:** `list_clients`, `list_tasks`, `get_schedule` (overflow samet), `get_briefing(narrative?)`, `ask_advice(question)`
 
 **Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`
+
+`get_briefing` din ka poora picture deta hai — aaj ke blocks, at_risk, blocked, stale tasks, overflow, 14-din capacity, aur har client ka retainer usage. `narrative: true` do to saath AI briefing bhi. `ask_advice` usi data par sawal ka jawab deta hai ("is hafte kya kaatun", "kaunsa client ignore ho raha hai").
 
 Capture ab Claude khud karta hai: sawal poochta hai, tasdeeq leta hai, phir `create_task` call karta hai — jismein `priority` **required** field hai aur tool description mein saaf likha hai ke priority hamesha user se poochni hai.
 
@@ -99,6 +102,25 @@ Har write ke baad scheduler khud rebuild hota hai. Sab tools database-scoped hai
 **Report approval MCP par nahi hai.** `generate_report` / `approve_report` jaan boojh kar mojood nahi — approval human gate hai aur sirf web app par rehta hai.
 
 ⚠️ MCP secret operator-grade access deta hai — client portal token se bilkul alag cheez hai. Kisi client ko kabhi na dein.
+
+## AI layer
+
+Do hisse hain:
+
+**Judgement** — `get_briefing` ka deterministic JSON AI ko diya jata hai, aur wo raye deta hai:
+
+| Job | Model | effort | Kab |
+|---|---|---|---|
+| `daily_briefing` | kimi-k3 | low | Dashboard par, roz ek dafa |
+| `overload_advice` | kimi-k3 | high | Sirf jab overflow ya at_risk ho |
+| `ask_advice` | kimi-k3 | low | `ask_advice` tool call par |
+| `estimate_insight` | kimi-k2.5 | — | Hafta-war (weekly cron) |
+
+**Report drafts** — `weekly_report` (k3, low) aur `monthly_report` (k3, high), sirf task history se.
+
+AI ko sirf taiyar JSON milta hai — wo khud DB query nahi karta. Classification (at_risk, stale, overflow, capacity) deterministic code mein hai aur tested hai. AI schedule badalne ki **tajweez** de sakta hai, schedule **bana** nahi sakta.
+
+Briefing aur advice `ai_cache` table mein roz ek dafa banti hain; dashboard par refresh button aaj ka cache girata hai. Provider down ho to dashboard ka baqi hissa phir bhi chalta hai.
 
 ## Reports
 
