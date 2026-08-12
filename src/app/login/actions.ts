@@ -1,9 +1,11 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { sendMagicLink } from '@/lib/authFlow';
+import { redirect } from 'next/navigation';
+import { sendMagicLink, signInOperator } from '@/lib/authFlow';
 
 export type LoginState = { stage: 'idle' | 'sent' | 'throttled'; email?: string };
+export type PasswordState = { stage: 'idle' | 'wrong' | 'throttled' | 'unavailable' };
 
 async function callerIp(): Promise<string | null> {
   const h = await headers();
@@ -29,4 +31,20 @@ export async function requestLinkAction(
 
   if (result.rateLimited) return { stage: 'throttled', email };
   return { stage: 'sent', email };
+}
+
+/**
+ * Operator sign-in with a password. One field, one submit, straight to Today.
+ * The address is not asked for — there is only ever one, and it is already
+ * in the environment.
+ */
+export async function signInAction(
+  _prev: PasswordState,
+  form: FormData,
+): Promise<PasswordState> {
+  const password = String(form.get('password') ?? '');
+  const result = await signInOperator(password, await callerIp());
+
+  if (result.ok) redirect('/');
+  return { stage: result.reason };
 }

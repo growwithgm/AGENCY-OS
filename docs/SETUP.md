@@ -27,20 +27,25 @@ Check it worked: **Table Editor** should now list `clients`, `tasks`,
 
 ---
 
-## 2. Turn on email sign-in
+## 2. Turn on sign-in
 
-Both the agency dashboard and the client portal use Supabase Auth magic
-links. No passwords exist anywhere in this system.
+The two sides sign in differently, on purpose:
+
+- **You** (the agency side) sign in with a **password** — set
+  `OPERATOR_PASSWORD` below and there is no email in the loop at all.
+- **Clients** sign in with an emailed link. Nothing to remember, nothing to
+  reset, and access can be revoked instantly by removing the address.
 
 **Authentication → Providers → Email**
 
 | Setting | Value | Why |
 |---|---|---|
-| Enable Email provider | **On** | Magic links are email links |
+| Enable Email provider | **On** | Both passwords and links live under this provider |
 | Confirm email | On | Default; harmless — users are created pre-confirmed |
 | Enable email signups | **Off** | Nobody may create their own account. The app creates users with the service-role key, only for the operator address and addresses you have added as client contacts. |
 
-**Authentication → URL Configuration**
+**Authentication → URL Configuration** — only needed for the client portal.
+If you are the only one signing in, skip it.
 
 | Setting | Value |
 |---|---|
@@ -51,9 +56,10 @@ Add `http://localhost:3000/auth/callback` as a second redirect URL while
 you are developing.
 
 > **Supabase's built-in email sender is rate limited** (a handful of
-> messages an hour) and is meant for testing. Before real use, add your own
-> SMTP under **Authentication → Emails → SMTP Settings** — otherwise a
-> client asking for a second link may simply not receive one.
+> messages an hour) and is meant for testing. Before giving the portal to
+> clients, add your own SMTP under **Authentication → Emails → SMTP
+> Settings** — otherwise a client asking for a second link may simply not
+> receive one. This does not affect your own sign-in.
 
 ---
 
@@ -80,6 +86,7 @@ for the first two, so an older deployment does not need renaming.
 
 | Variable | Missing means |
 |---|---|
+| `OPERATOR_PASSWORD` | You sign in with an emailed link instead of a password. Set it — invent a password of **at least 10 characters**. Anything shorter is ignored and you fall back to links without being told. |
 | `MOONSHOT_API_KEY` | Every AI job uses its deterministic fallback |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No push notifications. Generate with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` is `mailto:you@example.com` |
 | `APP_URL` | Falls back to the Vercel deployment URL. `APP_BASE_URL` is accepted as the older name. |
@@ -113,22 +120,34 @@ because the allowlist is re-checked on every request, not only at sign-in.
 
 1. Deploy, or run `npm run dev`.
 2. Go to `/login`.
-3. Enter the address in `OPERATOR_EMAIL`.
-4. Open the link in the email. You land on Today.
+3. Type the password you put in `OPERATOR_PASSWORD`. That is the whole
+   screen — there is no email field, because there is only one operator
+   address and the server already knows it.
 
-Nothing needs creating in the Supabase dashboard first — the app creates
-the auth user on the first request and stamps it with `role: owner` in
-`app_metadata`, which only the service-role key can write. That claim is
+You stay signed in on that device; the session refreshes itself in the
+background, so this is a one-time cost per browser, not a daily one.
+
+Nothing needs creating in the Supabase dashboard first. On that first
+sign-in the app creates the auth user (or repairs one you made by hand),
+sets its password to `OPERATOR_PASSWORD` and stamps it with `role: owner`
+in `app_metadata`, which only the service-role key can write. That claim is
 what row level security reads, so the role cannot be forged by the user it
 describes.
 
-If the link fails:
+**`OPERATOR_PASSWORD` is the password.** Change it in your host's settings
+and redeploy, and the old one stops working — there is nothing to update in
+Supabase, and no "forgot password" flow to get stuck in.
+
+If sign-in fails:
 
 | Symptom | Cause |
 |---|---|
-| "That link has expired" | The link was already used, or opened in a different browser from the one that requested it. Request another. |
-| Redirected back to `/login` with no error | `OPERATOR_EMAIL` does not match the address you typed. |
-| No email at all | Either the address is not the operator address, or you have hit Supabase's built-in email rate limit. |
+| "That password is not right" | The value in `OPERATOR_PASSWORD` differs from what you typed — a trailing space in the variable is the usual culprit. Or the variable was added after the last build: redeploy. |
+| The screen asks for an email, not a password | `OPERATOR_PASSWORD` is unset or shorter than 10 characters. `/api/health` says which. |
+| "Too many attempts" | Ten wrong guesses in fifteen minutes from one place. Wait it out. |
+
+Client sign-in is unchanged and needs no password: they enter their email
+at `/portal/login` and open the link.
 
 ---
 

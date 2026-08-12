@@ -1,6 +1,7 @@
+import { createHash, timingSafeEqual } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
-import { env } from '@/lib/env';
+import { env, operatorPasswordConfigured } from '@/lib/env';
 import { hashIdentifier, rateLimit } from '@/lib/rateLimit';
 import { recordAudit } from '@/lib/audit';
 
@@ -118,6 +119,91 @@ export async function sendMagicLink(req: LinkRequest): Promise<LinkResult> {
   });
 
   return { sent: !error, rateLimited: false };
+}
+
+/* ── Operator password sign-in ─────────────────────────────────────────── */
+
+const MAX_PASSWORD_ATTEMPTS_PER_IP = 10;
+const MAX_PASSWORD_ATTEMPTS_TOTAL = 25;
+const ATTEMPT_WINDOW = 900; // 15 minutes
+
+export type PasswordResult =
+  | { ok: true }
+  | { ok: false; reason: 'wrong' | 'throttled' | 'unavailable' };
+
+/** Constant-time compare of two secrets of any length. */
+function secretsMatch(a: string, b: string): boolean {
+  const left = createHash('sha256').update(a).digest();
+  const right = createHash('sha256').update(b).digest();
+  return timingSafeEqual(left, right);
+}
+
+/**
+ * Make the Supabase user match the environment.
+ *
+ * OPERATOR_PASSWORD is the single source of truth, so changing it in the
+ * host's settings changes the password — nothing to click in the Supabase
+ * dashboard, and a user created by hand there (which has no password and no
+ * role claim) is repaired on the first sign-in rather than being a dead end.
+ */
+async function syncOperatorUser(email: string, password: string): Promise<void> {
+  const admin = supabaseAdmin();
+  const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
+
+  if (existing) {
+    await admin.auth.admin.updateUserById(existing.id, {
+      password,
+      email_confirm: true,
+      app_metadata: { role: 'owner' },
+    });
+    return;
+  }
+
+  await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    app_metadata: { role: 'owner' },
+  });
+}
+
+/**
+ * Sign the operator in with a password. No email, no link, no waiting.
+ *
+ * The address is not asked for: there is exactly one operator address and it
+ * lives in the environment, so typing it every time is ceremony. The password
+ * is checked against OPERATOR_PASSWORD here first, and only a correct one
+ * causes any write — a wrong guess touches nothing but the rate limiter.
+ */
+export async function signInOperator(password: string, ip: string | null): Promise<PasswordResult> {
+  if (!operatorPasswordConfigured()) return { ok: false, reason: 'unavailable' };
+  if (!password) return { ok: false, reason: 'wrong' };
+
+  // Two limits: one per source, and one across all sources, so a spread-out
+  // attempt is bounded even though no single address stands out.
+  const byIp = ip
+    ? await rateLimit('operator_password_ip', hashIdentifier(ip), MAX_PASSWORD_ATTEMPTS_PER_IP, ATTEMPT_WINDOW)
+    : { allowed: true };
+  const overall = await rateLimit('operator_password', 'all', MAX_PASSWORD_ATTEMPTS_TOTAL, ATTEMPT_WINDOW);
+
+  if (!byIp.allowed || !overall.allowed) return { ok: false, reason: 'throttled' };
+
+  if (!secretsMatch(password, env.OPERATOR_PASSWORD)) {
+    await recordAudit({ type: 'signin_rejected', note: 'wrong operator password' });
+    return { ok: false, reason: 'wrong' };
+  }
+
+  const email = env.OPERATOR_EMAIL;
+  await syncOperatorUser(email, password);
+
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) return { ok: false, reason: 'unavailable' };
+
+  await recordAudit({ type: 'signin', actor: email, note: 'password' });
+  return { ok: true };
 }
 
 /** Record a successful portal sign-in against the contact row. */
