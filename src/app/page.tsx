@@ -1,71 +1,66 @@
-// Operator dashboard: week plan + overflow + report drafts.
-// Detail-heavy screens live here; capture lives on Discord (spec §2).
+// Operator dashboard — week plan, overflow, needs-review, report drafts.
+// The web app is the primary surface; Claude (over MCP) is the fast lane
+// for capture and task edits.
 
 import { db } from '@/lib/db';
+import { overflowTasks, scheduleBlocks, totalMinutes } from '@/scheduler/view';
+import { card, fmtHours, fmtTime, link, muted, Nav } from './ui';
 
 export const dynamic = 'force-dynamic';
-
-type BlockRow = {
-  starts_at: string; ends_at: string; is_locked: boolean;
-  tasks: { title: string; clients: { name: string } | null } | null;
-};
 
 export default async function Dashboard() {
   const now = new Date();
   const weekEnd = new Date(now.getTime() + 7 * 86400000);
 
-  const [{ data: blocks }, { data: drafts }, { data: openTasks }, { data: futureBlockTasks }] =
-    await Promise.all([
-      db().from('schedule_blocks')
-        .select('starts_at, ends_at, is_locked, tasks(title, clients(name))')
-        .gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString())
-        .order('starts_at'),
-      db().from('reports')
-        .select('id, kind, period_start, period_end, status, clients(name)')
-        .eq('status', 'draft').order('period_end', { ascending: false }),
-      db().from('tasks')
-        .select('id, title, est_minutes, due_at, needs_review, clients(name)')
-        .in('status', ['backlog', 'scheduled', 'in_progress']),
-      db().from('schedule_blocks').select('task_id').gte('starts_at', now.toISOString()),
-    ]);
+  const [blocks, overflow, { data: drafts }, { data: review }] = await Promise.all([
+    scheduleBlocks(now, weekEnd),
+    overflowTasks(now),
+    db().from('reports')
+      .select('id, kind, period_start, period_end, clients(name)')
+      .eq('status', 'draft').order('period_end', { ascending: false }),
+    db().from('tasks')
+      .select('id, title, due_at, clients(name)')
+      .eq('needs_review', true).neq('status', 'done'),
+  ]);
 
-  const scheduledIds = new Set((futureBlockTasks ?? []).map((b) => b.task_id));
-  const overflow = (openTasks ?? []).filter((t) => !scheduledIds.has(t.id));
-  const needsReview = (openTasks ?? []).filter((t) => t.needs_review);
-
-  const byDay = new Map<string, BlockRow[]>();
-  for (const b of (blocks ?? []) as unknown as BlockRow[]) {
+  const byDay = new Map<string, typeof blocks>();
+  for (const b of blocks) {
     const day = new Date(b.starts_at).toDateString();
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
 
-  const card: React.CSSProperties = {
-    background: '#171a21', borderRadius: 12, padding: '16px 20px', marginBottom: 16,
-  };
-
   return (
     <main style={{ maxWidth: 860, margin: '0 auto', padding: 24 }}>
       <h1 style={{ fontSize: 22 }}>Agency OS</h1>
+      <Nav />
 
       {overflow.length > 0 && (
         <section style={{ ...card, border: '1px solid #a3541e' }}>
-          <strong>⚠️ {Math.round(overflow.reduce((s, t) => s + (t.est_minutes ?? 60), 0) / 60)}h ka kaam
-            horizon mein fit nahi hua</strong>
+          <strong>⚠️ {fmtHours(totalMinutes(overflow))} ka kaam horizon mein fit nahi hua</strong>
           <ul>
-            {overflow.map((t) => {
-              const c = t.clients as unknown as { name: string } | null;
-              return <li key={t.id}>{c?.name ?? '—'} — {t.title}
-                {t.due_at ? ` (due ${t.due_at.slice(0, 10)})` : ''}</li>;
-            })}
+            {overflow.map((t) => (
+              <li key={t.id}>
+                {t.client ?? '—'} — {t.title} ({fmtHours(t.est_minutes)}
+                {t.due_at ? `, due ${t.due_at.slice(0, 10)}` : ''})
+              </li>
+            ))}
           </ul>
         </section>
       )}
 
-      {needsReview.length > 0 && (
+      {(review ?? []).length > 0 && (
         <section style={{ ...card, border: '1px solid #7a6a1e' }}>
-          <strong>📝 Review darkar ({needsReview.length})</strong> — expired captures ya AI defaults
+          <strong>📝 Review darkar ({review!.length})</strong>
           <ul>
-            {needsReview.map((t) => <li key={t.id}>{t.title}</li>)}
+            {review!.map((t) => {
+              const c = t.clients as unknown as { name: string } | null;
+              return (
+                <li key={t.id}>
+                  <a href={`/tasks/${t.id}`} style={link}>{c?.name ?? '—'} — {t.title}</a>
+                  {t.due_at && <span style={muted}> · due {t.due_at.slice(0, 10)}</span>}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -75,13 +70,12 @@ export default async function Dashboard() {
         {byDay.size === 0 && <p>Kuch scheduled nahi.</p>}
         {[...byDay.entries()].map(([day, items]) => (
           <div key={day}>
-            <h3 style={{ fontSize: 14, color: '#9aa3b2' }}>{day}</h3>
+            <h3 style={{ fontSize: 14, ...muted }}>{day}</h3>
             <ul style={{ marginTop: 4 }}>
               {items.map((b, i) => (
                 <li key={i}>
-                  {new Date(b.starts_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                  –{new Date(b.ends_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                  {' '}{b.tasks?.clients?.name ?? '—'} · {b.tasks?.title}
+                  {fmtTime(b.starts_at)}–{fmtTime(b.ends_at)}{' '}
+                  {b.client ?? '—'} · <a href={`/tasks/${b.task_id}`} style={link}>{b.title}</a>
                   {b.is_locked ? ' 🔒' : ''}
                 </li>
               ))}
@@ -98,7 +92,7 @@ export default async function Dashboard() {
             const c = d.clients as unknown as { name: string } | null;
             return (
               <li key={d.id}>
-                <a href={`/reports/${d.id}`} style={{ color: '#7aa2f7' }}>
+                <a href={`/reports/${d.id}`} style={link}>
                   {c?.name ?? '—'} — {d.kind} {d.period_start} → {d.period_end}
                 </a>
               </li>

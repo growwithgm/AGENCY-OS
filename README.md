@@ -1,6 +1,6 @@
 # Agency OS
 
-Ek-banda agency ke liye operations platform: **task capture → AI structuring → auto scheduling → client reporting**.
+Ek-banda agency ke liye operations platform: **capture (Claude) → auto scheduling → client reporting**.
 
 Canonical spec: [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) — code comments `spec §N` se usi ko reference karte hain.
 
@@ -10,43 +10,40 @@ Canonical spec: [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) — code comments `spec
 ## Architecture
 
 ```
-Discord (phone) ──► agency-bot (Python, bot/) ──HTTPS + x-bot-secret──► Next.js API
-                     · voice → Groq whisper                               · runAI() → Kimi (Moonshot)
-                     · koi LLM key nahi                                   · deterministic scheduler
-                                                                          · Supabase (Postgres + RLS)
+Claude (MCP) ──► /api/mcp ──┐
+                            ├──► Next.js + Supabase (Postgres + RLS)
+Operator ──► Web app ───────┘      · deterministic scheduler
+                                   · runAI() → Kimi (sirf report drafts)
 Client ──► /c/<token> portal (read-only, RLS-scoped JWT)
 Cron  ──► /api/cron/{nightly,weekly,monthly}
 ```
+
+Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek tez raasta hai: baat-cheet se task banana, edit karna, schedule dekhna.
 
 ## Repo layout
 
 | Path | Kya hai |
 |---|---|
-| `supabase/migrations/` | Schema, RLS policies, atomic capture-commit function, seed |
-| `src/scheduler/` | Deterministic engine (slots, topo-sort, scoring, first-fit, overflow) + tests |
-| `src/capture/` | Conversational capture: deterministic checklist + state machine |
-| `src/ai/` | `runAI()` wrapper (waahid LLM raasta), prompts (stable cache prefix), strict JSON schemas |
-| `src/reporting/` | Deterministic metrics/deltas, 2σ anomaly detection, draft generation, gated delivery |
-| `src/connectors/` | Meta / Windsor (Google+GA4) / Shopify → idempotent snapshots + health tracking |
-| `src/jobs/` | Job queue worker (report generation request-time par nahi chalti) |
-| `src/commands/` | `/today /week /done /block /client /report /approve /replan` handlers |
-| `src/mcp/` + `src/app/api/mcp/` | MCP server — Claude ko connect karne ke liye (read + write) |
-| `src/app/api/bot/` | Bot-facing endpoints (`x-bot-secret`) |
-| `src/app/api/cron/` | Nightly / weekly / monthly (`x-cron-secret` ya Vercel cron Bearer) |
+| `supabase/migrations/` | Schema, RLS policies, seed |
+| `src/scheduler/` | Deterministic engine (slots, topo-sort, scoring, first-fit, overflow) + tests + read models |
+| `src/tasks/` | Shared task operations — MCP aur web dono yahi call karte hain |
+| `src/mcp/` + `src/app/api/mcp/` | MCP server (8 tools) |
+| `src/ai/` | `runAI()` wrapper + report prompts — sirf do LLM jobs |
+| `src/reporting/` | Draft generation (task history se) + approval |
+| `src/jobs/` | Job queue worker |
+| `src/app/api/cron/` | Nightly / weekly / monthly |
+| `src/app/` | Dashboard, task CRUD, report review/approve |
 | `src/app/c/[token]/` | Client portal — token → scoped JWT → har query RLS se |
-| `src/app/` | Operator dashboard + report review/approve |
-| `bot/` | Discord bot (Python) — sirf transport, LLM key nahi |
 
 ## Setup
 
 ### 1. Database (Supabase)
 
 ```bash
-# migrations tarteeb se chalayein
-supabase db push   # ya SQL editor mein 0001 → 0002 → 0003
+supabase db push   # ya SQL editor mein 0001 → 0003
 ```
 
-### 2. Web app (Vercel ya koi Node host)
+### 2. Web app
 
 ```bash
 cp .env.example .env.local   # sab values bharein
@@ -58,28 +55,9 @@ npm run dev
 
 Cron: `vercel.json` mein UTC schedules hain (02:00 / Fri 17:00 / 1st 09:00 PKT ke mutabiq). Vercel `CRON_SECRET` env set karein — routes `Authorization: Bearer` bhi accept karte hain.
 
-### 3. Discord bot
+## MCP — Claude ko connect karna
 
-```bash
-cd bot
-cp .env.example .env         # token, allowed user IDs, API base, shared secret, Groq key
-pip install -r requirements.txt
-python bot.py
-```
-
-Bot outbound-only connect karta hai — koi port forwarding, static IP ya tunnel nahi chahiye.
-
-### 4. Connectors (optional env)
-
-- `META_AD_ACCOUNTS` — JSON `{ "<brand_slug>": "act_..." }`
-- `WINDSOR_ACCOUNTS` — JSON `{ "<brand_slug>": { "google": "...", "ga4": "..." } }`
-- `SHOPIFY_SHOPS` — JSON `{ "<brand_slug>": { "domain": "...", "token": "env:VAR" } }`
-
-Missing config = wo connector us client ke liye skip; failure = `connection_health` + Discord notification.
-
-## MCP — Claude ko connect karna (read + write)
-
-Deploy hone ke baad `/api/mcp` par ek MCP server chalta hai (Streamable HTTP). `MCP_SECRET` env mein lamba random string rakhein — unset ho to endpoint band rehta hai.
+`MCP_SECRET` env mein lamba random string rakhein — unset ho to endpoint band rehta hai.
 
 **claude.ai (web/mobile)** — Settings → Connectors → Add custom connector:
 
@@ -108,15 +86,23 @@ claude mcp add --transport http agency-os https://<aapka-app>.vercel.app/api/mcp
 }
 ```
 
-### Tools
+### Tools (8)
 
-**Read:** `list_clients`, `get_client`, `list_tasks`, `get_schedule` (overflow samet), `list_reports`, `get_report`, `get_metrics`, `get_ai_usage` (token/cost visibility)
+**Read:** `list_clients`, `list_tasks`, `get_schedule` (overflow samet)
 
-**Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`, `replan`, `generate_report` (sirf draft banata hai), `approve_report` (invariant-3 gate — sirf operator ke kehne par), `deliver_report`
+**Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`
 
-Sab tools database-scoped hain (invariant 10) — koi shell ya filesystem access nahi. Writes ke baad scheduler khud rebuild hota hai. Reports wala safeguard MCP se bhi qaim hai: draft bina approval ke client tak nahi ja sakta — `deliver_report` draft bhejne se inkaar kar deta hai.
+Capture ab Claude khud karta hai: sawal poochta hai, tasdeeq leta hai, phir `create_task` call karta hai — jismein `priority` **required** field hai aur tool description mein saaf likha hai ke priority hamesha user se poochni hai.
 
-⚠️ MCP secret operator-grade access deta hai — ye client portal token se bilkul alag cheez hai. Kisi client ko kabhi na dein.
+Har write ke baad scheduler khud rebuild hota hai. Sab tools database-scoped hain — koi shell ya filesystem access nahi.
+
+**Report approval MCP par nahi hai.** `generate_report` / `approve_report` jaan boojh kar mojood nahi — approval human gate hai aur sirf web app par rehta hai.
+
+⚠️ MCP secret operator-grade access deta hai — client portal token se bilkul alag cheez hai. Kisi client ko kabhi na dein.
+
+## Reports
+
+Weekly (Fri) aur monthly (1st) drafts cron se bante hain, **sirf task history se** — koi metrics, koi connectors. Draft dashboard par aata hai; approve karne par client ke portal par live ho jata hai. Delivery ka waahid channel portal hai — koi email/WhatsApp push nahi.
 
 ## Tests
 
@@ -130,7 +116,8 @@ npm run typecheck
 Poori list `docs/BLUEPRINT.md` §14 mein. Sab se ahem:
 
 1. Scheduling ki math sirf `src/scheduler/engine.ts` mein — AI wahan kabhi nahi aata.
-2. AI output sirf capture ke **Confirm** par DB mein jata hai; priority hamesha operator chunta hai.
-3. Report bina `approved` client tak nahi jati (`deliver.ts` draft bhejne se inkaar karta hai).
+2. Priority AI kabhi tay nahi karta; task banane se pehle tasdeeq lazmi.
+3. Report bina `approved` client tak nahi jati; approval sirf web par.
 4. Har table par RLS; portal short-lived scoped JWT se parhta hai.
 5. Har LLM call `runAI()` se — `reasoning_effort` + `max_completion_tokens` hamesha explicit.
+6. Har write ke baad scheduler rebuild.

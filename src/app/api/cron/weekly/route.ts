@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isCronAuthorized } from '@/lib/apiAuth';
 import { db } from '@/lib/db';
 import { enqueue, drainJobs } from '@/jobs/worker';
-import { notifyOperator } from '@/lib/notify';
 
 export const maxDuration = 300;
 
-/** Friday 17:00 PKT: weekly draft per active client + operator notification. Idempotent. */
+/**
+ * Friday 17:00 PKT: weekly draft per active client. Idempotent.
+ * Drafts wait on the web app for review + approval (invariant 3).
+ */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { data: clients } = await db().from('clients').select('id, name').eq('status', 'active');
-
-  // skip clients that already have a draft for this period (idempotency)
+  const { data: clients } = await db().from('clients').select('id').eq('status', 'active');
   const periodEnd = new Date().toISOString().slice(0, 10);
+
   let queued = 0;
   for (const client of clients ?? []) {
     const { data: existing } = await db()
@@ -29,11 +30,5 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await drainJobs(queued + 5);
-
-  if (queued) {
-    await notifyOperator(
-      `📝 ${queued} weekly draft(s) ban gaye. Review: \`/report <slug>\` ya web app → approve.`,
-    );
-  }
   return NextResponse.json({ ok: true, queued, ...result });
 }

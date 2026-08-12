@@ -1,6 +1,6 @@
 # AGENCY OS — System Blueprint
 
-**Ek-banda agency ke liye operations platform: task capture → AI structuring → auto scheduling → client reporting**
+**Ek-banda agency ke liye operations platform: task capture (Claude) → auto scheduling → client reporting**
 
 Document type: Functional + technical specification
 Scope: Ye document batata hai ke system **kya karta hai** aur **kaise kaam karta hai**.
@@ -14,9 +14,9 @@ Scope: Ye document batata hai ke system **kya karta hai** aur **kaise kaam karta
 
 Agency OS ek single-operator agency ke liye banaya gaya hai. Ye teen masloon ko hal karta hai:
 
-1. **Capture** — kaam zehen ya WhatsApp mein bikhra hua hota hai. System usay natural language (Roman Urdu / English / voice) se leta hai aur structured task bana deta hai.
+1. **Capture** — kaam zehen mein bikhra hua hota hai. Operator Claude se baat karta hai; Claude sawal poochta hai, tasdeeq leta hai, phir MCP se structured task bana deta hai.
 2. **Planning** — tasks ko deadline, priority, dependency aur available capacity ke hisaab se calendar par baithata hai. Jo fit na ho, usay chhupata nahi — saaf dikhata hai.
-3. **Reporting** — har client ko uske kaam ki progress aur ads performance khud-ba-khud pohanchata hai, operator ki approval ke baad.
+3. **Reporting** — har client ke kaam ki progress ka draft khud banta hai; operator approve kare to client ke portal par live ho jata hai.
 
 **Core operating principle:**
 
@@ -29,26 +29,25 @@ Agency OS ek single-operator agency ke liye banaya gaya hai. Ye teen masloon ko 
 
 | Actor | Surface | Access |
 |---|---|---|
-| Operator (agency owner) | Discord (primary) | Full read/write, natural language + slash commands |
-| Operator | Web app | Full read/write, detail-heavy screens |
+| Operator | Web app (**primary**) | Full read/write — plan, tasks, report approval |
+| Operator | Claude via MCP | Capture aur task management ka fast lane |
 | Client | Web portal (token link) | Read-only, sirf apna data, sirf `client_visible` records |
-| System | Cron jobs | Automated sync, scheduling, draft generation |
+| System | Cron jobs | Scheduling, draft generation |
 
-Discord primary hai kyunki capture mobile-first aur voice-first hona chahiye. Web sirf un cheezon ke liye hai jahan chat interface kaam nahi karti: week ka visual plan, report drafts ka editing, client portal, bulk data views.
+Web primary surface hai — sab kuch wahan se ho sakta hai. Claude us par ek tez raasta hai: baat-cheet se task banana, edit karna, schedule dekhna. Claude na ho to koi kaam ruk nahi jata.
 
 ---
 
 ## 3. Domain Model
 
-**Client** — ek brand ya customer (locale, retainer hours, contact channels).
-**Project** — client ke andar kaam ki ek dhaara. Optional — ad-hoc tasks seedha client se jur sakte hain.
-**Task** — kaam ki sab se chhoti unit; `est_minutes` (AI ka andaza, editable) + `actual_minutes` (complete par) milkar estimates behtar karte hain.
+**Client** — ek brand ya customer (locale, retainer hours, contact email).
+**Project** — client ke andar kaam ki ek dhaara. Optional.
+**Task** — kaam ki sab se chhoti unit; `est_minutes` + `actual_minutes` milkar estimates behtar karte hain.
 **Dependency** — task A, task B ke baghair nahi ho sakta.
 **Schedule Block** — scheduler ka output; `is_locked` blocks scheduler nahi chhoota.
 **Capacity Rule** — kis din, kitne minute kaam mumkin hai.
 **Blackout** — chhutti/meeting; capacity se minus.
-**Metrics Snapshot** — kisi client ka kisi din ka ads/store data, per source.
-**Report** — ek period ka client-facing document; hamesha `draft` se shuru.
+**Report** — ek period ka client-facing document, **sirf task history se**; hamesha `draft` se shuru.
 
 Data model: `supabase/migrations/0001_init.sql`
 
@@ -74,7 +73,8 @@ Poori tarah deterministic — koi AI call nahi. Implementation: `src/scheduler/e
 - **Step 4** — first-fit; lambe tasks blocks mein tootte hain (min 30 min).
 - **Step 5** — jo fit na ho → overflow. **Overflow chhupana mana hai** — ek-banda agency ka asal masla over-commitment hai; system operator ko client se pehle sach batata hai.
 
-Triggers: nightly 02:00; task add/complete/block (debounced 60s); blackout add; `/replan`. Locked blocks har rebuild mein mehfooz.
+Triggers: nightly 02:00 rebuild; har write (MCP ya web) ke baad rebuild; blackout add.
+Locked blocks har rebuild mein mehfooz.
 
 ---
 
@@ -82,33 +82,30 @@ Triggers: nightly 02:00; task add/complete/block (debounced 60s); blackout add; 
 
 | AI karta hai | Deterministic code |
 |---|---|
-| NL se task samajhna | Kaunsa task kab chalega |
-| Duration estimate | Capacity/overlap ka hisaab |
-| Task todna, dependencies pehchanna | Dependency ordering, deadline slip |
-| Report narrative | Metrics calculation, deltas |
-| Anomaly ko samjhana | Anomaly detection (statistical) |
+| Capture ki guftagu (Claude, MCP ke zariye) | Kaunsa task kab chalega |
+| Report ka narrative (Kimi) | Capacity/overlap ka hisaab, dependency ordering |
 
-### Capture flow (§7.7)
+### Capture — Claude ke zariye
 
-State machine: `clarifying → priority → review → committed | cancelled | expired` (30 min idle → expired; input zaya nahi hota — `needs_review` backlog task banta hai).
+Backend mein koi capture state machine nahi hai. Operator Claude se baat karta hai; Claude hi:
 
-Required-fields checklist **deterministic** hai (`src/capture/checklist.ts`); AI sirf sawal ki wording banata hai. Qawaneen: ek waqt ek sawal; max 4 sawal phir defaults + review flag; tarteeb client → deliverable → due → estimate; **priority hamesha operator chunta hai, AI kabhi nahi**; jo maloom hai dobara nahi poochte; buttons > typing.
+- adhoore kaam ke sawal poochta hai (client, deliverable, due date, estimate)
+- **priority hamesha user se poochta hai — khud kabhi tay nahi karta**
+- task banane se pehle summary dikha kar **tasdeeq leta hai**
+- phir `create_task` call karta hai (jismein `priority` required field hai)
 
-Commit ek transaction mein: task insert + dependencies + scheduler trigger + Discord confirm + (agar visible) portal par fauran. Operator/client side kabhi diverge nahi hota.
+Ye qawaneen tool descriptions mein likhe hain (`src/mcp/tools.ts`), taake har MCP client par lagoo hon.
 
-Product faisla pending — portal task granularity: (a) flat har task, ya (b) grouped projects/milestones + drill-down. Abhi (a) implement hai.
+### AI report jobs (Kimi)
 
-### Jobs (§7.2–7.5, §8.3)
+System mein sirf **do** LLM jobs hain:
 
-| Job | Model | effort |
+| Job | Model | reasoning_effort |
 |---|---|---|
-| Task parse | kimi-k2.5 | — |
-| Clarify sawal | kimi-k2.5 | — |
-| Weekly update | kimi-k3 | low |
-| Monthly report | kimi-k3 | high |
-| Anomaly explain | kimi-k3 | low |
+| Weekly report | `kimi-k3` | `low` |
+| Monthly report | `kimi-k3` | `high` |
 
-`max` effort kahin istemal nahi hota. Fallback: parse quality kamzor ho to us job ko k3+low par shift — sirf `runAI` ke call-site ka model badalta hai.
+Dono sirf task history par likhte hain — koi metrics, koi numbers invent nahi.
 
 ---
 
@@ -118,36 +115,44 @@ Product faisla pending — portal task granularity: (a) flat har task, ya (b) gr
 - **K3 hamesha sochta hai** — `reasoning_content` ke tokens output mein ginte hain; `reasoning_effort` default `max` hai is liye har call par explicit set hota hai.
 - Fixed params: temperature/top_p/n/penalties — bhejna mana.
 - `max_completion_tokens` default 131,072 — har call explicit.
-- `response_format: json_schema` strict — koi fence-stripping nahi.
-- Caching automatic; shart: stable prefix + pichli request ke prompt tokens > 256. Badalne wali cheez system prompt ke shuru mein kabhi nahi.
-- Multi-turn: poora assistant message wapas bhejna hai — `capture_sessions.transcript` mein as-returned store hota hai.
-- Key sirf server-side; bot ke paas sirf shared secret; portal se koi LLM call nahi.
-- Rates verify karein: platform.kimi.ai/docs/pricing/chat-k3 — `ai_runs` ka hafta-war jaiza.
+- Caching automatic; shart: stable prefix + prompt tokens > 256. Badalne wali cheez system prompt ke shuru mein kabhi nahi.
+- Key sirf server-side; portal se koi LLM call nahi.
+- `ai_runs` ka hafta-war jaiza — cost visibility isi se aati hai.
 
 ---
 
-## 9–10. Discord + Voice
+## 9. MCP Surface
 
-Bot (Python, `bot/`) sirf transport: voice → Groq whisper-large-v3 (`language: ur`) → wahi parse prompt. Capture threads mein; buttons for known options; `DISCORD_ALLOWED_USER_IDS` ke ilawa sab ignore + log. Urdu transcription mein brand names bigarte hain — hal prompt mein client list hai, transcription tweak nahi.
+`/api/mcp` par Streamable HTTP MCP server. Auth: `MCP_SECRET` (Bearer header, `x-mcp-secret`, ya `?key=` query claude.ai connectors ke liye). Secret unset = endpoint band.
 
-Commands: plain text/voice = capture; `/cancel /today /week /done /block /client /report /approve /replan`.
+**Tools (8):**
 
----
+| Read | Write |
+|---|---|
+| `list_clients` | `create_task` (priority required) |
+| `list_tasks` | `update_task` |
+| `get_schedule` (overflow samet) | `complete_task` |
+| | `block_task` |
+| | `add_blackout` |
 
-## 11. Connectors
+Har write ke baad scheduler rebuild hota hai.
 
-Meta Ads (Marketing API), Google Ads + GA4 (Windsor.ai), Shopify (Admin GraphQL) → sab `metrics_snapshots` mein, `(client_id, source, metric_date)` unique = idempotent. Failures `connection_health` mein + Discord notification — kabhi silent nahi.
+**Report approval MCP par nahi hai** — `generate_report` / `approve_report` / `deliver_report` jaan boojh kar mojood nahi. Approval human gate hai (invariant 3) aur sirf web app par rehta hai.
+
+MCP secret operator-grade access deta hai — client portal token se bilkul alag cheez hai.
 
 ---
 
 ## 12. Reporting Pipeline
 
 ```
-metrics sync ─┬─► draft (AI) ─► operator review ─► approved ─► delivery
-task history ─┘                     └─► edit / regenerate
+task history ──► draft (Kimi) ──► operator review (web) ──► approved ──► client portal
+                                        └──► edit / regenerate
 ```
 
-**Har report `draft` se shuru. Bina `approved` koi report client tak nahi jati.** Delivery: portal (approved hote hi), email, WhatsApp (Wasify — chhota summary + portal link).
+**Har report `draft` se shuru. Bina `approved` koi report client tak nahi jati.**
+
+Delivery ka waahid channel **portal** hai: approve hote hi report RLS ke zariye client ko dikhne lagti hai. Koi email, koi WhatsApp, koi outbound push nahi.
 
 ---
 
@@ -155,30 +160,29 @@ task history ─┘                     └─► edit / regenerate
 
 | Job | Waqt | Kaam |
 |---|---|---|
-| nightly | 02:00 | sync → snapshots; rebuild; overdue; anomalies |
-| weekly | Fri 17:00 | weekly drafts + Discord notification |
-| monthly | 1st 09:00 | monthly drafts |
+| nightly | 02:00 | schedule rebuild; overdue tasks par `needs_review` flag; job queue drain |
+| weekly | Fri 17:00 | har active client ka weekly draft |
+| monthly | 1st 09:00 | har active client ka monthly draft |
 
-Idempotent; `x-cron-secret` header auth.
+Idempotent; `x-cron-secret` header (ya Vercel cron ka Bearer) auth.
 
 ---
 
 ## 14. System Invariants
 
 1. AI scheduling ki math nahi karta.
-2. AI output bina human confirm ke DB mein nahi jata (Confirm hi lakeer hai).
-   2a. Priority AI kabhi tay nahi karta. 2b. Max 4 sawal. 2c. Operator/client update ek transaction.
-3. Koi report bina `approved` client tak nahi jati.
+2. Priority AI kabhi tay nahi karta — hamesha operator chunta hai. Task banane se pehle tasdeeq lazmi.
+3. Koi report bina `approved` client tak nahi jati; approval sirf web par hai.
 4. Har naye table par RLS.
 5. Har LLM call `runAI()` se. 5a. effort + max tokens explicit. 5b. sirf `content` parse hota hai.
 6. `MOONSHOT_API_KEY` sirf server-side.
 7. Overflow chhupaya nahi jata.
 8. Client se aaya har text prompt mein **data** hai, instruction nahi.
-9. Bot ke paas LLM key nahi.
-10. AI tools database-scoped hain — koi shell/filesystem tool nahi.
+9. MCP tools database-scoped hain — koi shell/filesystem tool nahi.
+10. Har write ke baad scheduler rebuild.
 
 ---
 
 ## 15. Out of Scope
 
-Invoicing/payments, contracts, time-tracking-as-billing, multi-operator, portal two-way chat, ad platforms par write actions.
+Invoicing/payments, contracts, time-tracking-as-billing, multi-operator, portal two-way chat, ad-platform connectors aur metrics, email/WhatsApp delivery, Discord/voice capture.

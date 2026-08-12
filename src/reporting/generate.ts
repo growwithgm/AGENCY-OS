@@ -1,11 +1,13 @@
 // Report drafting. Every report starts as `draft` — nothing reaches a client
-// without explicit approval (invariant 3). Generation runs on the job queue,
-// never at request time (K3 always thinks; long calls outlive serverless timeouts).
+// without explicit approval on the web app (invariant 3). Generation runs on
+// the job queue, never at request time (K3 always thinks; long calls outlive
+// serverless timeouts).
+//
+// Reports are built from task history only — no metrics, no connectors.
 
 import { db } from '@/lib/db';
 import { runAI } from '@/ai/runAI';
 import { monthlyReportSystem, weeklyReportSystem } from '@/ai/prompts';
-import { summarizeMetrics } from './metrics';
 
 type TaskRow = {
   title: string; client_title: string | null; status: string;
@@ -37,23 +39,18 @@ export async function generateWeeklyDraft(clientId: string, now = new Date()): P
 
   const periodEnd = now.toISOString().slice(0, 10);
   const periodStart = new Date(now.getTime() - 6 * 86400000).toISOString().slice(0, 10);
-
-  const [tasks, metrics] = await Promise.all([
-    clientTasks(clientId, new Date(now.getTime() - 7 * 86400000).toISOString()),
-    summarizeMetrics(clientId, periodStart, periodEnd),
-  ]);
+  const tasks = await clientTasks(clientId, new Date(now.getTime() - 7 * 86400000).toISOString());
 
   const { result: narrative } = await runAI<string>({
     kind: 'weekly_report',
     model: 'kimi-k3',
-    effort: 'low',
+    effort: 'low', // tone chahiye, gehri soch nahi (spec §8.3)
     system: weeklyReportSystem(client.locale ?? 'es'),
     messages: [{
       role: 'user',
       content:
         `Client: ${client.name}\nPeriod: ${periodStart} → ${periodEnd}\n\n` +
-        `Tasks:\n${taskLines(tasks) || '(quiet week — keep it short)'}\n\n` +
-        `Metrics deltas (deterministic, do not recompute):\n${JSON.stringify(metrics.deltas, null, 2)}`,
+        `Tasks:\n${taskLines(tasks) || '(quiet week — keep it short)'}`,
     }],
     maxTokens: 1500,
   });
@@ -64,7 +61,7 @@ export async function generateWeeklyDraft(clientId: string, now = new Date()): P
     period_end: periodEnd,
     kind: 'weekly',
     narrative_md: narrative,
-    data_json: { tasks, metrics },
+    data_json: { tasks },
     status: 'draft',
   }).select('id').single();
   if (error) throw new Error(`report insert failed: ${error.message}`);
@@ -79,24 +76,18 @@ export async function generateMonthlyDraft(clientId: string, now = new Date()): 
   const firstOfThis = new Date(now.getFullYear(), now.getMonth(), 1);
   const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
   const periodEnd = new Date(firstOfThis.getTime() - 86400000).toISOString().slice(0, 10);
-
-  const [tasks, metrics] = await Promise.all([
-    clientTasks(clientId, `${periodStart}T00:00:00Z`),
-    summarizeMetrics(clientId, periodStart, periodEnd),
-  ]);
+  const tasks = await clientTasks(clientId, `${periodStart}T00:00:00Z`);
 
   const { result: narrative } = await runAI<string>({
     kind: 'monthly_report',
     model: 'kimi-k3',
-    effort: 'high', // extracting insight from metrics is real reasoning work (§8.3)
+    effort: 'high', // ek mahine ke kaam ko ek kahani mein baandhna reasoning ka kaam hai (§8.3)
     system: monthlyReportSystem(client.locale ?? 'es'),
     messages: [{
       role: 'user',
       content:
         `Client: ${client.name}\nPeriod: ${periodStart} → ${periodEnd}\n\n` +
-        `Completed tasks:\n${taskLines(tasks)}\n\n` +
-        `Metrics with prior-month comparison (deterministic, do not recompute):\n` +
-        JSON.stringify(metrics.deltas, null, 2),
+        `Task history:\n${taskLines(tasks) || '(quiet month — keep it short)'}`,
     }],
     maxTokens: 4000,
   });
@@ -107,7 +98,7 @@ export async function generateMonthlyDraft(clientId: string, now = new Date()): 
     period_end: periodEnd,
     kind: 'monthly',
     narrative_md: narrative,
-    data_json: { tasks, metrics },
+    data_json: { tasks },
     status: 'draft',
   }).select('id').single();
   if (error) throw new Error(`report insert failed: ${error.message}`);

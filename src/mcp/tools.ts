@@ -1,15 +1,20 @@
-// MCP server tools — Claude ko Agency OS se connect karne ke liye (read + write).
-// Invariant 10 ka pabandi: har tool database-scoped hai; koi shell ya
-// filesystem tool nahi. Ye surface operator ke liye hai (web app jaisa full
-// access) — client-facing raasta sirf portal hai, aur wo RLS ke peechay hai.
+// MCP tools — Claude is the capture surface (spec §7). Claude asks the
+// clarifying questions in conversation, then calls create_task with a
+// structured, user-confirmed result. There is no backend capture state
+// machine and no task-parsing AI job.
+//
+// Invariant 10: every tool is database-scoped — no shell, no filesystem.
+// Report approval is deliberately NOT here: it is a human gate and lives
+// on the web app only (invariant 3).
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { db } from '@/lib/db';
-import { rebuildSchedule } from '@/scheduler/rebuild';
-import { enqueue, drainJobs } from '@/jobs/worker';
-import { approveReport, deliverReport } from '@/reporting/deliver';
-import { cmdBlock, cmdClient, cmdDone, cmdToday, cmdWeek } from '@/commands/handlers';
+import { overflowTasks, scheduleBlocks, totalMinutes } from '@/scheduler/view';
+import {
+  addBlackout, blockTask, clientBySlug, completeTask,
+  createTask, findOpenTask, updateTask,
+} from '@/tasks/operations';
 
 function text(value: unknown) {
   return {
@@ -24,9 +29,12 @@ function err(message: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
 }
 
-async function clientBySlug(slug: string) {
-  const { data } = await db().from('clients').select('id, name').eq('brand_slug', slug).maybeSingle();
-  return data;
+async function guard<T>(fn: () => Promise<T>) {
+  try {
+    return text(await fn());
+  } catch (e) {
+    return err(e instanceof Error ? e.message : String(e));
+  }
 }
 
 export function registerTools(server: McpServer): void {
@@ -41,7 +49,8 @@ export function registerTools(server: McpServer): void {
       .select('name, brand_slug, locale, retainer_hours, status')
       .order('name');
     const { data: open } = await db()
-      .from('tasks').select('client_id, clients(brand_slug)').neq('status', 'done');
+      .from('tasks').select('clients(brand_slug)').neq('status', 'done');
+
     const counts = new Map<string, number>();
     for (const t of open ?? []) {
       const slug = (t.clients as unknown as { brand_slug: string } | null)?.brand_slug;
@@ -50,24 +59,20 @@ export function registerTools(server: McpServer): void {
     return text((clients ?? []).map((c) => ({ ...c, open_tasks: counts.get(c.brand_slug) ?? 0 })));
   });
 
-  server.registerTool('get_client', {
-    description: 'Ek client ka overview: open tasks, retainer usage, last report.',
-    inputSchema: { slug: z.string().describe('Client ka brand_slug') },
-  }, async ({ slug }) => text(await cmdClient(slug)));
-
   server.registerTool('list_tasks', {
-    description: 'Tasks list karo. Filters optional hain.',
+    description: 'Tasks list karo. Filters optional hain. Task IDs yahan se milte hain jo update_task mein chahiye hote hain.',
     inputSchema: {
       client_slug: z.string().optional(),
       status: z.enum(['backlog', 'scheduled', 'in_progress', 'blocked', 'review', 'done']).optional(),
       needs_review: z.boolean().optional().describe('Sirf review-darkar tasks'),
-      limit: z.number().int().min(1).max(200).optional(),
+      limit: z.number().int().min(1).max(200).optional().describe('default 50'),
     },
   }, async ({ client_slug, status, needs_review, limit }) => {
     let q = db().from('tasks')
-      .select('id, title, status, priority, est_minutes, actual_minutes, due_at, blocked_reason, client_visible, needs_review, ai_confidence, created_at, clients(brand_slug, name)')
+      .select('id, title, client_title, description, status, priority, est_minutes, actual_minutes, due_at, blocked_reason, client_visible, needs_review, created_at, completed_at, clients(brand_slug, name)')
       .order('created_at', { ascending: false })
       .limit(limit ?? 50);
+
     if (status) q = q.eq('status', status);
     if (needs_review !== undefined) q = q.eq('needs_review', needs_review);
     if (client_slug) {
@@ -75,232 +80,122 @@ export function registerTools(server: McpServer): void {
       if (!client) return err(`client "${client_slug}" nahi mila`);
       q = q.eq('client_id', client.id);
     }
+
     const { data, error } = await q;
     if (error) return err(error.message);
     return text(data);
   });
 
   server.registerTool('get_schedule', {
-    description: 'Schedule dekho: aaj ya poora hafta, overflow warning samet.',
+    description: 'Schedule dekho — blocks aur overflow dono. Overflow wo kaam hai jo horizon mein fit nahi hua; usay hamesha user ko batao, chhupao mat.',
     inputSchema: { range: z.enum(['today', 'week']).optional().describe('default: week') },
-  }, async ({ range }) => text(range === 'today' ? await cmdToday() : await cmdWeek()));
+  }, async ({ range }) => {
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(dayStart.getTime() + (range === 'today' ? 1 : 7) * 86400000);
 
-  server.registerTool('list_reports', {
-    description: 'Reports list karo (drafts review ke liye, ya sent history).',
-    inputSchema: {
-      status: z.enum(['draft', 'approved', 'sent']).optional(),
-      client_slug: z.string().optional(),
-      limit: z.number().int().min(1).max(100).optional(),
-    },
-  }, async ({ status, client_slug, limit }) => {
-    let q = db().from('reports')
-      .select('id, kind, period_start, period_end, status, sent_at, sent_via, clients(brand_slug, name)')
-      .order('period_end', { ascending: false })
-      .limit(limit ?? 25);
-    if (status) q = q.eq('status', status);
-    if (client_slug) {
-      const client = await clientBySlug(client_slug);
-      if (!client) return err(`client "${client_slug}" nahi mila`);
-      q = q.eq('client_id', client.id);
-    }
-    const { data, error } = await q;
-    if (error) return err(error.message);
-    return text(data);
-  });
+    const [blocks, overflow] = await Promise.all([
+      scheduleBlocks(range === 'today' ? dayStart : now, end),
+      overflowTasks(now),
+    ]);
 
-  server.registerTool('get_report', {
-    description: 'Ek report ka poora narrative aur data.',
-    inputSchema: { report_id: z.string().uuid() },
-  }, async ({ report_id }) => {
-    const { data, error } = await db().from('reports')
-      .select('*, clients(brand_slug, name)').eq('id', report_id).maybeSingle();
-    if (error) return err(error.message);
-    if (!data) return err('report nahi mila');
-    return text(data);
-  });
-
-  server.registerTool('get_metrics', {
-    description: 'Client ke metrics snapshots (date range, per source).',
-    inputSchema: {
-      client_slug: z.string(),
-      from: z.string().describe('YYYY-MM-DD'),
-      to: z.string().describe('YYYY-MM-DD'),
-      source: z.enum(['meta', 'google', 'ga4', 'shopify']).optional(),
-    },
-  }, async ({ client_slug, from, to, source }) => {
-    const client = await clientBySlug(client_slug);
-    if (!client) return err(`client "${client_slug}" nahi mila`);
-    let q = db().from('metrics_snapshots')
-      .select('source, metric_date, payload')
-      .eq('client_id', client.id)
-      .gte('metric_date', from).lte('metric_date', to)
-      .order('metric_date');
-    if (source) q = q.eq('source', source);
-    const { data, error } = await q;
-    if (error) return err(error.message);
-    return text(data);
-  });
-
-  server.registerTool('get_ai_usage', {
-    description: 'AI cost visibility: ai_runs ka summary (tokens, latency, errors) pichle N din.',
-    inputSchema: { days: z.number().int().min(1).max(90).optional().describe('default 7') },
-  }, async ({ days }) => {
-    const since = new Date(Date.now() - (days ?? 7) * 86400000).toISOString();
-    const { data, error } = await db().from('ai_runs')
-      .select('kind, model, input_tokens, output_tokens, latency_ms, ok')
-      .gte('created_at', since);
-    if (error) return err(error.message);
-    const byKind = new Map<string, { calls: number; input: number; output: number; errors: number; ms: number }>();
-    for (const r of data ?? []) {
-      const key = `${r.kind} (${r.model})`;
-      const agg = byKind.get(key) ?? { calls: 0, input: 0, output: 0, errors: 0, ms: 0 };
-      agg.calls++;
-      agg.input += r.input_tokens ?? 0;
-      agg.output += r.output_tokens ?? 0;
-      agg.ms += r.latency_ms ?? 0;
-      if (!r.ok) agg.errors++;
-      byKind.set(key, agg);
-    }
-    return text(Object.fromEntries(
-      [...byKind.entries()].map(([k, v]) => [k, { ...v, avg_ms: Math.round(v.ms / v.calls) }]),
-    ));
+    return text({
+      range: range ?? 'week',
+      blocks,
+      overflow_hours: Math.round((totalMinutes(overflow) / 60) * 10) / 10,
+      overflow,
+    });
   });
 
   // ── WRITE ─────────────────────────────────────────────────────────
 
   server.registerTool('create_task', {
-    description: 'Naya task banao. Ye operator-side direct write hai (capture flow ka Confirm nahi chahiye kyunki tool call khud operator ka amal hai). Scheduler khud rebuild ho jata hai.',
+    description:
+      'Naya task banao.\n' +
+      'priority hamesha user se poochho, khud tay mat karo.\n' +
+      'Task banane se pehle summary dikha kar user ki tasdeeq lo.\n' +
+      'Scheduler khud rebuild ho jata hai; agar task horizon mein fit na ho to jawab mein overflow=true aayega — wo user ko batao.',
     inputSchema: {
-      client_slug: z.string(),
-      title: z.string(),
+      client_slug: z.string().describe('list_clients se'),
+      title: z.string().describe('Chhota, action-oriented'),
+      priority: z.number().int().min(1).max(5)
+        .describe('1=urgent .. 5=lowest. User se poochha gaya ho — khud mat chuno.'),
       description: z.string().optional(),
       est_minutes: z.number().int().min(5).optional().describe('default 60'),
-      priority: z.number().int().min(1).max(5).optional().describe('1=urgent .. 5; default 3'),
       due_at: z.string().optional().describe('ISO timestamp'),
-      client_visible: z.boolean().optional().describe('default true'),
+      client_visible: z.boolean().optional().describe('default true — client portal par dikhega'),
+      client_title: z.string().optional().describe('Client-facing title, agar internal title se alag ho'),
     },
-  }, async ({ client_slug, title, description, est_minutes, priority, due_at, client_visible }) => {
-    const client = await clientBySlug(client_slug);
-    if (!client) return err(`client "${client_slug}" nahi mila`);
-    const { data, error } = await db().from('tasks').insert({
-      client_id: client.id,
-      title,
-      description: description ?? null,
-      est_minutes: est_minutes ?? 60,
-      priority: priority ?? 3,
-      due_at: due_at ?? null,
-      client_visible: client_visible ?? true,
-      raw_input: `[mcp] ${title}`,
-    }).select('id').single();
-    if (error) return err(error.message);
-    const sched = await rebuildSchedule();
-    return text({ task_id: data.id, scheduled_blocks: sched.blocks.filter((b) => b.task_id === data.id).length, overflow: sched.overflow.some((t) => t.id === data.id) });
-  });
+  }, async (args) => guard(async () => {
+    const client = await clientBySlug(args.client_slug);
+    if (!client) throw new Error(`client "${args.client_slug}" nahi mila`);
+    return createTask({
+      clientId: client.id,
+      title: args.title,
+      priority: args.priority,
+      description: args.description,
+      estMinutes: args.est_minutes,
+      dueAt: args.due_at,
+      clientVisible: args.client_visible,
+      clientTitle: args.client_title,
+      source: 'mcp',
+    });
+  }));
 
   server.registerTool('update_task', {
-    description: 'Task ke fields update karo (title, priority, estimate, due date, visibility, status waghaira).',
+    description: 'Task ke fields update karo. Task ID list_tasks se milta hai. Priority badalni ho to wo bhi user ka faisla hai.',
     inputSchema: {
       task_id: z.string().uuid(),
       title: z.string().optional(),
-      description: z.string().optional(),
+      client_title: z.string().nullable().optional(),
+      description: z.string().nullable().optional(),
       priority: z.number().int().min(1).max(5).optional(),
       est_minutes: z.number().int().min(5).optional(),
       due_at: z.string().nullable().optional(),
       client_visible: z.boolean().optional(),
-      needs_review: z.boolean().optional().describe('false = review clear'),
+      needs_review: z.boolean().optional().describe('false = review clear ho gaya'),
       status: z.enum(['backlog', 'scheduled', 'in_progress', 'blocked', 'review']).optional(),
     },
-  }, async ({ task_id, ...fields }) => {
-    const updates = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
-    if (!Object.keys(updates).length) return err('koi field nahi diya');
-    const { data, error } = await db().from('tasks').update(updates).eq('id', task_id).select('id, title').maybeSingle();
-    if (error) return err(error.message);
-    if (!data) return err('task nahi mila');
-    await rebuildSchedule();
-    return text(`"${data.title}" update ho gaya; schedule rebuild ho gaya.`);
-  });
+  }, async ({ task_id, ...fields }) => guard(async () => {
+    const task = await updateTask(task_id, fields);
+    return `"${task.title}" update ho gaya; schedule rebuild ho gaya.`;
+  }));
 
   server.registerTool('complete_task', {
-    description: 'Task done mark karo. actual_minutes dena estimates behtar karta hai.',
+    description: 'Task done mark karo. actual_minutes dena estimates behtar karta hai — mil sake to poochho.',
     inputSchema: {
       search: z.string().describe('Task title ka hissa'),
       actual_minutes: z.number().int().min(1).optional(),
     },
-  }, async ({ search, actual_minutes }) => text(await cmdDone(search, actual_minutes)));
+  }, async ({ search, actual_minutes }) => guard(async () => {
+    const found = await findOpenTask(search);
+    if (!found) throw new Error(`"${search}" se koi open task nahi mila`);
+    const task = await completeTask(found.id, actual_minutes);
+    return `✅ "${task.title}" done${actual_minutes ? ` (${actual_minutes} min)` : ''}; schedule rebuild ho gaya.`;
+  }));
 
   server.registerTool('block_task', {
-    description: 'Task blocked mark karo — wajah client ke agle update mein khud aati hai.',
+    description: 'Task blocked mark karo — wajah client ke agle report draft mein khud aati hai.',
     inputSchema: {
       search: z.string().describe('Task title ka hissa'),
       reason: z.string().describe('Kis cheez ka intezar hai'),
     },
-  }, async ({ search, reason }) => text(await cmdBlock(search, reason)));
+  }, async ({ search, reason }) => guard(async () => {
+    const found = await findOpenTask(search);
+    if (!found) throw new Error(`"${search}" se koi open task nahi mila`);
+    const task = await blockTask(found.id, reason);
+    return `⛔ "${task.title}" blocked: ${reason}`;
+  }));
 
   server.registerTool('add_blackout', {
-    description: 'Blackout add karo (chhutti, meeting) — capacity se minus, scheduler rebuild.',
+    description: 'Blackout add karo (chhutti, meeting, personal waqt) — capacity se minus hota hai aur scheduler rebuild ho jata hai.',
     inputSchema: {
       starts_at: z.string().describe('ISO timestamp'),
       ends_at: z.string().describe('ISO timestamp'),
       reason: z.string().optional(),
     },
-  }, async ({ starts_at, ends_at, reason }) => {
-    const { error } = await db().from('blackouts').insert({ starts_at, ends_at, reason: reason ?? null });
-    if (error) return err(error.message);
-    const sched = await rebuildSchedule();
-    return text(`Blackout add ho gaya. Rebuild: ${sched.blocks.length} blocks, ${sched.overflow.length} overflow.`);
-  });
-
-  server.registerTool('replan', {
-    description: 'Scheduler manually chalao (deterministic engine — koi AI nahi).',
-    inputSchema: {},
-  }, async () => {
-    const sched = await rebuildSchedule();
-    return text({
-      blocks: sched.blocks.length,
-      overflow: sched.overflow.map((t) => t.id),
-      cycles: sched.cycles,
-    });
-  });
-
-  server.registerTool('generate_report', {
-    description: 'Report ka DRAFT banao (weekly ya monthly). Draft client ko nahi dikhta jab tak approve na ho.',
-    inputSchema: {
-      client_slug: z.string(),
-      kind: z.enum(['weekly', 'monthly']),
-    },
-  }, async ({ client_slug, kind }) => {
-    const client = await clientBySlug(client_slug);
-    if (!client) return err(`client "${client_slug}" nahi mila`);
-    await enqueue(`${kind}_report`, { client_id: client.id });
-    await drainJobs(1);
-    const { data: draft } = await db().from('reports')
-      .select('id, narrative_md')
-      .eq('client_id', client.id).eq('kind', kind).eq('status', 'draft')
-      .order('period_end', { ascending: false }).limit(1).maybeSingle();
-    if (!draft) return err('draft generation fail hui — jobs table check karein');
-    return text({ report_id: draft.id, narrative: draft.narrative_md });
-  });
-
-  server.registerTool('approve_report', {
-    description: 'Draft approve karo — approved hote hi report client portal par live ho jati hai. Ye invariant-3 ka human-approval gate hai: is tool ko sirf operator ke kehne par chalao.',
-    inputSchema: { report_id: z.string().uuid() },
-  }, async ({ report_id }) => {
-    await approveReport(report_id);
-    return text('Report approved — portal par live. Email/WhatsApp ke liye deliver_report chalao.');
-  });
-
-  server.registerTool('deliver_report', {
-    description: 'Approved report client ko bhejo (email ya WhatsApp). Draft bhejne se system inkaar karega.',
-    inputSchema: {
-      report_id: z.string().uuid(),
-      via: z.enum(['email', 'whatsapp']),
-    },
-  }, async ({ report_id, via }) => {
-    try {
-      await deliverReport(report_id, via);
-      return text(`Report ${via} se bhej di gayi.`);
-    } catch (e) {
-      return err(e instanceof Error ? e.message : String(e));
-    }
-  });
+  }, async ({ starts_at, ends_at, reason }) => guard(async () => {
+    const sched = await addBlackout(starts_at, ends_at, reason);
+    return `Blackout add ho gaya. Rebuild: ${sched.blocks.length} blocks, ${sched.overflow.length} overflow.`;
+  }));
 }
