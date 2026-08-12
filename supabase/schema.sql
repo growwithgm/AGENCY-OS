@@ -2,8 +2,14 @@
 -- Ledger — complete database schema
 --
 -- Paste this whole file into the Supabase SQL editor and run it once.
--- It is idempotent: running it again changes nothing and destroys nothing,
--- so it is safe to re-run after a change.
+--
+-- Safe on both a fresh project and a database that already has the older
+-- schema in it. `create table if not exists` skips a table that already
+-- exists, which would silently leave it missing every new column — so
+-- every table is followed by `add column if not exists` for its full
+-- shape, and the old single due date is migrated across.
+--
+-- Idempotent: re-running changes nothing and destroys nothing.
 --
 -- What it sets up:
 --   1.  Identity helpers read from the JWT
@@ -81,6 +87,13 @@ create table if not exists client_contacts (
 
 create index if not exists client_contacts_client_idx on client_contacts (client_id);
 
+-- Reconcile a clients table that predates this file.
+alter table clients add column if not exists contact_email  text;
+alter table clients add column if not exists locale         text default 'en';
+alter table clients add column if not exists retainer_hours numeric;
+alter table clients add column if not exists status         text default 'active';
+alter table clients add column if not exists created_at     timestamptz default now();
+
 create table if not exists projects (
   id        uuid primary key default gen_random_uuid(),
   client_id uuid references clients(id) on delete cascade,
@@ -124,6 +137,77 @@ create table if not exists tasks (
   created_at            timestamptz default now(),
   completed_at          timestamptz
 );
+
+-- Reconcile a tasks table that predates this file. Without these, an
+-- existing database keeps its old shape and every index and view below
+-- fails on a column that was never added.
+alter table tasks add column if not exists client_title          text;
+alter table tasks add column if not exists description           text;
+alter table tasks add column if not exists raw_input             text;
+alter table tasks add column if not exists actual_minutes        int default 0;
+alter table tasks add column if not exists client_requested_date date;
+alter table tasks add column if not exists internal_target       date;
+alter table tasks add column if not exists committed_date        date;
+alter table tasks add column if not exists client_visible        boolean default true;
+alter table tasks add column if not exists work_type             text;
+alter table tasks add column if not exists slid_count            int not null default 0;
+alter table tasks add column if not exists last_planned_for      date;
+alter table tasks add column if not exists needs_review          boolean default false;
+alter table tasks add column if not exists blocked_reason        text;
+alter table tasks add column if not exists origin                text default 'operator';
+alter table tasks add column if not exists recurrence_rule_id    uuid;
+alter table tasks add column if not exists source_request_id     uuid;
+alter table tasks add column if not exists completed_at          timestamptz;
+
+-- Carry the old single due date across.
+--
+-- It becomes an internal target, never a commitment: the old rows never
+-- recorded whether a date was a promise, and inventing promises the
+-- operator never made is exactly what the commitment field exists to
+-- prevent. Promote the real ones by hand afterwards.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'tasks' and column_name = 'due_at'
+  ) then
+    update tasks
+       set internal_target = coalesce(internal_target, (due_at at time zone 'UTC')::date)
+     where due_at is not null and internal_target is null;
+  end if;
+
+  -- The old name for the slide counter.
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'tasks' and column_name = 'reschedule_count'
+  ) then
+    update tasks set slid_count = greatest(slid_count, coalesce(reschedule_count, 0));
+    alter table tasks drop column reschedule_count;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'tasks' and column_name = 'last_scheduled_for'
+  ) then
+    update tasks set last_planned_for = coalesce(last_planned_for, last_scheduled_for);
+    alter table tasks drop column last_scheduled_for;
+  end if;
+
+  -- Superseded by client_updates, which keeps its evidence and is
+  -- immutable once published.
+  if to_regclass('reports') is not null then
+    drop table reports cascade;
+  end if;
+
+  -- The URL-token portal scheme: tokens in links leak through history,
+  -- referrers and screenshots.
+  if to_regclass('client_portal_tokens') is not null then
+    drop table client_portal_tokens cascade;
+  end if;
+end $$;
+
+-- The old index on a column that no longer drives anything.
+drop index if exists tasks_due_idx;
 
 -- States only, never a percentage.
 alter table tasks drop constraint if exists tasks_status_check;
@@ -205,6 +289,8 @@ create table if not exists schedule_blocks (
   plan_run_id  uuid references plan_runs(id) on delete set null,
   generated_at timestamptz default now()
 );
+
+alter table schedule_blocks add column if not exists plan_run_id uuid references plan_runs(id) on delete set null;
 
 create index if not exists schedule_blocks_time_idx on schedule_blocks (starts_at, ends_at);
 
@@ -360,6 +446,12 @@ create table if not exists client_requests (
   expires_at            timestamptz default (now() + interval '7 days')
 );
 
+alter table client_requests add column if not exists ip_hash               text;
+alter table client_requests add column if not exists operator_note         text;
+alter table client_requests add column if not exists operator_note_visible boolean default false;
+alter table client_requests add column if not exists created_task_id       uuid references tasks(id) on delete set null;
+alter table client_requests add column if not exists expires_at            timestamptz default (now() + interval '7 days');
+
 create index if not exists client_requests_state_idx  on client_requests (state, created_at desc);
 create index if not exists client_requests_client_idx on client_requests (client_id, created_at desc);
 
@@ -379,6 +471,11 @@ create table if not exists push_subscriptions (
   failure_count   int default 0,
   active          boolean default true
 );
+
+alter table push_subscriptions add column if not exists user_id         uuid;
+alter table push_subscriptions add column if not exists active          boolean default true;
+alter table push_subscriptions add column if not exists failure_count   int default 0;
+alter table push_subscriptions add column if not exists last_success_at timestamptz;
 
 create table if not exists notification_settings (
   kind       text primary key,
@@ -451,7 +548,7 @@ begin
     'client_updates','capture_drafts','client_requests','push_subscriptions',
     'notification_settings','notification_log','ai_runs','rate_limit_events',
     -- retained from the previous build; nothing writes to these today
-    'reports','ai_cache','jobs'
+    'ai_cache','jobs'
   ]
   loop
     if to_regclass(t) is null then continue; end if;

@@ -10,8 +10,17 @@ Supabase dashboard → **SQL Editor** → New query → paste the whole of
 [`supabase/schema.sql`](../supabase/schema.sql) → **Run**.
 
 That one file is everything: tables, functions, row level security, the
-portal projections and the seed data. It is idempotent, so you can re-run
-it later without losing anything.
+portal projections and the seed data.
+
+It works on a fresh project and on a database that already has the older
+schema in it — existing tables get their missing columns added, the old
+single `due_at` is carried across into `internal_target`, and no data is
+dropped. It is idempotent, so re-running it later is safe.
+
+> The old date becomes an **internal target, never a commitment**. Those
+> rows never recorded whether a date was a promise, and inventing promises
+> is exactly what the commitment field exists to prevent. Promote the real
+> ones yourself from each work item's page.
 
 Check it worked: **Table Editor** should now list `clients`, `tasks`,
 `client_contacts`, `attention_signals` and the rest.
