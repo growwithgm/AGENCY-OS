@@ -29,6 +29,7 @@ export function Nav() {
     <nav style={{ display: 'flex', gap: 16, marginBottom: 20, fontSize: 14 }}>
       <a href="/" style={link}>Dashboard</a>
       <a href="/tasks" style={link}>Tasks</a>
+      <a href="/requests" style={link}>Requests</a>
       <a href="/reports" style={link}>Reports</a>
       <a href="/settings" style={link}>Settings</a>
     </nav>

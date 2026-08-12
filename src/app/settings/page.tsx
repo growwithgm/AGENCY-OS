@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const NOTIFICATION_KINDS = [
+  { kind: 'client_request', title: 'Client ki nayi request', when: 'Fauran — jab client kaam maange' },
   { kind: 'morning_briefing', title: 'Aaj ka plan', when: 'Roz 08:30 — halka din ho to nahi jati' },
   { kind: 'overload_alert', title: 'Overload alert', when: 'Roz 08:35 — sirf jab kaam zyada ho' },
   { kind: 'evening_check', title: 'Sham ka check', when: 'Roz 18:00 — sirf jab tasks reh jayen' },

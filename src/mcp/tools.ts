@@ -14,6 +14,9 @@ import { overflowTasks, scheduleBlocks, totalMinutes } from '@/scheduler/view';
 import { buildBriefing } from '@/briefing/data';
 import { askAdviceText, cachedDailyBriefing } from '@/ai/judgement';
 import {
+  approveRequest, declineRequest, estimateSuggestionFor, getRequest, pendingRequests,
+} from '@/requests/approve';
+import {
   addBlackout, blockTask, clientBySlug, completeTask,
   createTask, findOpenTask, updateTask,
 } from '@/tasks/operations';
@@ -215,6 +218,69 @@ export function registerTools(server: McpServer): void {
     if (!found) throw new Error(`"${search}" se koi open task nahi mila`);
     const task = await blockTask(found.id, reason);
     return `⛔ "${task.title}" blocked: ${reason}`;
+  }));
+
+  // ── CLIENT REQUESTS ───────────────────────────────────────────────
+  // A client request never becomes a task by itself — approve_request is
+  // the operator's decision, and priority is always asked for.
+
+  server.registerTool('list_pending_requests', {
+    description: 'Clients ki bheji hui work requests jo approval ka intezar kar rahi hain.',
+    inputSchema: {},
+  }, async () => guard(async () => pendingRequests()));
+
+  server.registerTool('get_request', {
+    description: 'Ek client request ki poori tafseel: original matn, AI ke sawal aur client ke jawab.',
+    inputSchema: { request_id: z.string().uuid() },
+  }, async ({ request_id }) => guard(async () => {
+    const req = await getRequest(request_id);
+    if (!req) throw new Error('request nahi mili');
+    const suggestion = await estimateSuggestionFor(
+      (req.draft?.title as string) ?? req.raw_input.slice(0, 80),
+    );
+    return { ...req, estimate_suggestion: suggestion };
+  }));
+
+  server.registerTool('approve_request', {
+    description:
+      'Client request approve karke task banao.\n' +
+      'priority hamesha user se poochho, khud tay mat karo.\n' +
+      'Approve karne se pehle title aur estimate ki summary dikha kar user ki tasdeeq lo — ' +
+      'approve hote hi task client ke portal par dikhne lagta hai.',
+    inputSchema: {
+      request_id: z.string().uuid(),
+      title: z.string().describe('Internal title — chhota, action-oriented'),
+      priority: z.number().int().min(1).max(5)
+        .describe('1=urgent .. 5=lowest. User se poochha gaya ho — khud mat chuno.'),
+      est_minutes: z.number().int().min(5).optional(),
+      due_at: z.string().optional().describe('ISO timestamp'),
+      description: z.string().optional(),
+      client_title: z.string().optional().describe('Client-facing title, agar alag ho'),
+      client_visible: z.boolean().optional().describe('default true'),
+      note: z.string().optional().describe('Operator ka note (client ko nahi dikhta)'),
+    },
+  }, async (args) => guard(async () => approveRequest({
+    requestId: args.request_id,
+    title: args.title,
+    priority: args.priority,
+    estMinutes: args.est_minutes,
+    dueAt: args.due_at,
+    description: args.description,
+    clientTitle: args.client_title,
+    clientVisible: args.client_visible,
+    note: args.note,
+  })));
+
+  server.registerTool('decline_request', {
+    description: 'Client request decline karo. Wajah lazmi hai; show_to_client tay karta hai ke wajah client ko dikhe ya nahi.',
+    inputSchema: {
+      request_id: z.string().uuid(),
+      note: z.string().describe('Wajah — lazmi'),
+      show_to_client: z.boolean().describe('true = wajah client ke portal par dikhegi'),
+    },
+  }, async ({ request_id, note, show_to_client }) => guard(async () => {
+    await declineRequest(request_id, note, show_to_client);
+    return 'Request decline ho gayi.';
   }));
 
   server.registerTool('add_blackout', {

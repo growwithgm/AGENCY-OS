@@ -31,6 +31,7 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 | `src/briefing/` | Deterministic briefing data + at_risk/stale classification (tests ke saath) |
 | `src/ai/` | `runAI()` wrapper, `jobs.config.ts` (model/effort/tokens), prompts, judgement layer, cache |
 | `src/push/` | Web Push delivery, send policy (tested), notification triggers |
+| `src/requests/` | Client work requests — rate limits, injection defence, approval (tested) |
 | `src/reporting/` | Draft generation (task history se) + approval |
 | `src/jobs/` | Job queue worker |
 | `src/app/api/cron/` | Nightly / weekly / monthly |
@@ -88,11 +89,11 @@ claude mcp add --transport http agency-os https://<aapka-app>.vercel.app/api/mcp
 }
 ```
 
-### Tools (10)
+### Tools (14)
 
-**Read:** `list_clients`, `list_tasks`, `get_schedule` (overflow samet), `get_briefing(narrative?)`, `ask_advice(question)`
+**Read:** `list_clients`, `list_tasks`, `get_schedule` (overflow samet), `get_briefing(narrative?)`, `ask_advice(question)`, `list_pending_requests`, `get_request`
 
-**Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`
+**Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`, `approve_request`, `decline_request`
 
 `get_briefing` din ka poora picture deta hai — aaj ke blocks, at_risk, blocked, stale tasks, overflow, 14-din capacity, aur har client ka retainer usage. `narrative: true` do to saath AI briefing bhi. `ask_advice` usi data par sawal ka jawab deta hai ("is hafte kya kaatun", "kaunsa client ignore ho raha hai").
 
@@ -146,12 +147,21 @@ Phir `/settings` par jaa kar **Enable notifications** dabayein.
 | Sham ka check | 18:00 roz | Sirf jab aaj ke tasks adhoore hon |
 | Report drafts | Fri 17:05 | Sirf jab draft pending ho |
 | Bar-bar shift hone wale tasks | Mon 09:00 | Sirf jab koi task 3+ baar move ho chuka ho |
+| Client ki nayi request | Fauran | Jab client kaam maange |
 
 Content AI likh sakta hai, lekin **bhejne ka faisla hamesha deterministic code karta hai** — halka din khamoshi se guzarta hai. Har notification par tag hota hai taake purani replace ho, stack na ho. Mar chuke devices (404/410) khud delete ho jate hain; 5 baar fail hone par subscription deactivate.
 
 Sab toggles `/settings` par hain (master switch samet), device list aur test button ke saath.
 
 ⚠️ Vercel Hobby plan par sirf 2 cron jobs allowed hain — poora set (8) Pro plan maangta hai, ya kisi bahar ke scheduler se `/api/cron/*` hit karein (`x-cron-secret` header ke saath).
+
+## Client work requests
+
+Client apne portal se kaam maang sakta hai: likhta hai → AI max 3 sawal poochta hai (uski apni zubaan mein) → request operator ke paas chali jati hai.
+
+**Request se task kabhi khud nahi banta.** `/requests` par operator ko client ka asal matn, poori sawal-jawab transcript, aur editable draft milta hai — **priority khali hoti hai, wahi bharta hai**, aur `est_minutes` mein pichle kaam ka median suggestion dikhta hai. Approve par task banta hai aur client ke portal par dikhne lagta hai; decline par wajah lazmi hai (client ko dikhani hai ya nahi, ye operator tay karta hai).
+
+Security ki tafseel `docs/BLUEPRINT.md` §10 mein — mukhtasiran: client ka text hamesha delimiters ke andar **data** hai, `client_id` hamesha validated token se aata hai, rate limit 5/client aur 10/IP per 24h, question budget code mein cap, aur client ke paas apni request approve karne ka koi raasta nahi.
 
 ## Reports
 
@@ -170,6 +180,7 @@ Poori list `docs/BLUEPRINT.md` §14 mein. Sab se ahem:
 
 1. Scheduling ki math sirf `src/scheduler/engine.ts` mein — AI wahan kabhi nahi aata.
 2. Priority AI kabhi tay nahi karta; task banane se pehle tasdeeq lazmi.
+2a. Client request se task kabhi khud nahi banta — operator approval lazmi.
 3. Report bina `approved` client tak nahi jati; approval sirf web par.
 4. Har table par RLS; portal short-lived scoped JWT se parhta hai.
 5. Har LLM call `runAI()` se — `reasoning_effort` + `max_completion_tokens` hamesha explicit.

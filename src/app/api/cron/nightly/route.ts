@@ -3,6 +3,7 @@ import { isCronAuthorized } from '@/lib/apiAuth';
 import { db } from '@/lib/db';
 import { rebuildSchedule } from '@/scheduler/rebuild';
 import { drainJobs } from '@/jobs/worker';
+import { expireStaleRequests } from '@/requests/flow';
 
 export const maxDuration = 300;
 
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     await db().from('tasks').update({ needs_review: true }).in('id', overdue.map((t) => t.id));
   }
 
+  const expiredRequests = await expireStaleRequests();
   const jobs = await drainJobs();
 
   return NextResponse.json({
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
     overflow: sched.overflow.length,
     cycles: sched.cycles.length,
     overdueFlagged: overdue?.length ?? 0,
+    expiredRequests,
     jobs,
   });
 }

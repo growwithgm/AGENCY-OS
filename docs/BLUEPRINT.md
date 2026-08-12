@@ -31,7 +31,7 @@ Agency OS ek single-operator agency ke liye banaya gaya hai. Ye teen masloon ko 
 |---|---|---|
 | Operator | Web app (**primary**) | Full read/write — plan, tasks, report approval |
 | Operator | Claude via MCP | Capture aur task management ka fast lane |
-| Client | Web portal (token link) | Read-only, sirf apna data, sirf `client_visible` records |
+| Client | Web portal (token link) | Read-only + work requests (approval ke bagair kuch nahi banta) |
 | System | Cron jobs | Scheduling, draft generation |
 
 Web primary surface hai — sab kuch wahan se ho sakta hai. Claude us par ek tez raasta hai: baat-cheet se task banana, edit karna, schedule dekhna. Claude na ho to koi kaam ruk nahi jata.
@@ -110,6 +110,7 @@ nahi rakhte — cost tuning ek file se hoti hai.
 | `overload_advice` | `kimi-k3` | high | 800 | 2-3 options, har ek mein trade-off |
 | `ask_advice` | `kimi-k3` | high | 1500 | Briefing data par sawal ka jawab |
 | `estimate_insight` | `kimi-k2.5` | — | 800 | Kahan andaza ghalat hota hai |
+| `clarify_client_request` | `kimi-k2.5` | — | 500 | Client portal par max 3 sawal |
 
 `max` effort kisi job par nahi — ek test isay enforce karta hai.
 
@@ -154,7 +155,7 @@ render hota hai — AI card apni ghalti khud dikhata hai.
 
 `/api/mcp` par Streamable HTTP MCP server. Auth: `MCP_SECRET` (Bearer header, `x-mcp-secret`, ya `?key=` query claude.ai connectors ke liye). Secret unset = endpoint band.
 
-**Tools (10):**
+**Tools (14):**
 
 | Read | Write |
 |---|---|
@@ -163,6 +164,8 @@ render hota hai — AI card apni ghalti khud dikhata hai.
 | `get_schedule` (overflow samet) | `complete_task` |
 | `get_briefing(narrative?)` | `block_task` |
 | `ask_advice(question)` | `add_blackout` |
+| `list_pending_requests` | `approve_request` (priority required) |
+| `get_request` | `decline_request` |
 
 Har write ke baad scheduler rebuild hota hai.
 
@@ -171,6 +174,50 @@ Har write ke baad scheduler rebuild hota hai.
 MCP secret operator-grade access deta hai — client portal token se bilkul alag cheez hai.
 
 ---
+
+## 10. Client Work Requests
+
+Client portal se kaam maang sakta hai. **Request se task kabhi khud nahi
+banta** — operator ki approval hi wo lakeer hai.
+
+```
+client likhta hai → AI max 3 sawal → client confirm
+   → pending_approval → operator approve/decline → tabhi task banta hai
+```
+
+Client ko sirf itna dikhta hai: "request bhej di gayi hai, manzoori ke baad
+task list mein aa jayegi." Apni requests ki state (pending / accepted /
+declined) dikhti hai — operator ka note sirf tab jab operator ne
+"client ko dikhao" tick kiya ho.
+
+**AI ke rules (`clarify_client_request`):** timeline ka waada nahi, cost ya
+feasibility par kuch nahi, "task ban gaya" kehna mana. Scope se bahar lage
+to bhi mana nahi karta — request le leta hai, faisla agency ka hai.
+
+### Security
+
+Ye system ka waahid raasta hai jahan bahar ka text andar aata hai:
+
+- Client ka har lafz **data** hai, instruction nahi (invariant 8): delimiters
+  ke andar jata hai, system prompt mein saaf likha hai ke us ki hidayat nahi
+  maanni, aur forged delimiters strip ho jate hain (tested)
+- `client_id` hamesha **validated token** se aata hai, kabhi input se nahi
+- Har call par token dobara validate (revoked/expired check)
+- Rate limit: ek client 24 ghante mein 5 requests, ek IP se 10 (IP hashed)
+- Question budget code mein cap hai — AI us se aage nahi ja sakta
+- RLS: client sirf apni requests dekhta hai; approve karne ka koi raasta
+  client ke paas nahi (uske role ke liye insert/update policy hai hi nahi)
+- 7 din baad `expired`
+
+### Operator ka faisla
+
+`/requests` par: client ka asal matn, poori sawal-jawab transcript, aur
+editable draft. **Priority khali hoti hai — operator hi bharta hai.**
+`est_minutes` mein pichle kaam ka median suggestion dikhta hai (sirf
+mashwara, khud apply nahi hota). Decline par wajah lazmi hai.
+
+MCP par bhi wahi: `list_pending_requests`, `get_request`, `approve_request`
+(priority required), `decline_request`.
 
 ## 11. Notifications (Web Push / PWA)
 
@@ -224,6 +271,8 @@ Idempotent; `x-cron-secret` header (ya Vercel cron ka Bearer) auth.
 
 0. **AI kabhi `schedule_blocks` nahi likhta.** Judgement layer sirf parhta hai
    aur tajweez deta hai; placement `scheduler/engine.ts` ka kaam hai.
+0a. **Client request se task KABHI khud nahi banta** — operator approval lazmi.
+0b. **AI client se timeline ya cost ka waada nahi karta.**
 1. AI scheduling ki math nahi karta.
 2. Priority AI kabhi tay nahi karta — hamesha operator chunta hai. Task banane se pehle tasdeeq lazmi.
 3. Koi report bina `approved` client tak nahi jati; approval sirf web par hai.

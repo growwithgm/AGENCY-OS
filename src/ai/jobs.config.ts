@@ -13,7 +13,8 @@ export type AIJobName =
   | 'monthly_report'
   | 'overload_advice'
   | 'ask_advice'
-  | 'estimate_insight';
+  | 'estimate_insight'
+  | 'clarify_client_request';
 
 export type AIJobConfig = {
   model: AIModel;
@@ -39,6 +40,10 @@ export const AI_JOBS: Record<AIJobName, AIJobConfig> = {
 
   // Pattern-spotting over a small table of ratios
   estimate_insight: { model: 'kimi-k2.5',                 maxTokens: 800 },
+
+  // One short question at a time on the client portal — cheapest tier,
+  // and the only job that ever sees text from outside the agency
+  clarify_client_request: { model: 'kimi-k2.5',            maxTokens: 500 },
 };
 
 export function jobConfig(name: AIJobName): AIJobConfig {

@@ -7,7 +7,7 @@ import { subscriptionOutcome } from './policy';
 
 export type NotificationKind =
   | 'morning_briefing' | 'overload_alert' | 'evening_check'
-  | 'report_drafts' | 'stale_tasks' | 'test';
+  | 'report_drafts' | 'stale_tasks' | 'client_request' | 'test';
 
 export type PushPayload = {
   title: string;
