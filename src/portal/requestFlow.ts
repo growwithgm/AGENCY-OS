@@ -5,10 +5,17 @@
  * kept verbatim for the operator to read, their stated urgency is recorded
  * as information rather than priority (INV-1), and the flow never says a
  * date, a promise or the word "scheduled".
+ *
+ * On privilege: portal *reads* go through the client's own session and the
+ * portal projections. This one write path uses the service-role client
+ * instead, because the client role deliberately has no insert or update
+ * policy on client_requests — a client must never be able to write a
+ * request for another client, or move their own to approved. Every call
+ * here takes `clientId` from the validated session and scopes on it; the
+ * form cannot supply it.
  */
 
 import { createHash } from 'crypto';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { nextIntakeQuestion, MAX_QUESTIONS } from '@/ai/jobs/clientIntake';
 import { rateLimit, hashIdentifier } from '@/lib/rateLimit';
@@ -24,11 +31,12 @@ export type IntakeStep =
   | { stage: 'error'; message: string };
 
 export async function startRequest(
-  db: SupabaseClient,
   clientId: string,
   rawInput: string,
   ip: string | null,
 ): Promise<IntakeStep> {
+  const db = supabaseAdmin();
+
   const byClient = await rateLimit('client_request', hashIdentifier(clientId), MAX_REQUESTS_PER_DAY, DAY_SECONDS);
   if (!byClient.allowed) {
     return {
@@ -55,15 +63,16 @@ export async function startRequest(
 
   if (error) return { stage: 'error', message: 'Something went wrong. Please try again.' };
 
-  return continueRequest(db, clientId, data.id, null);
+  return continueRequest(clientId, data.id, null);
 }
 
 export async function continueRequest(
-  db: SupabaseClient,
   clientId: string,
   requestId: string,
   answer: string | null,
 ): Promise<IntakeStep> {
+  const db = supabaseAdmin();
+
   const { data: request } = await db.from('client_requests')
     .select('id, client_id, raw_input, transcript, questions_asked, state, draft')
     .eq('id', requestId)
@@ -128,9 +137,8 @@ export async function continueRequest(
 
 async function notifyOperator(requestId: string): Promise<void> {
   const { sendPush } = await import('@/push/send');
-  const admin = supabaseAdmin();
 
-  const { data } = await admin.from('client_requests')
+  const { data } = await supabaseAdmin().from('client_requests')
     .select('draft, raw_input, clients(name)')
     .eq('id', requestId)
     .maybeSingle();

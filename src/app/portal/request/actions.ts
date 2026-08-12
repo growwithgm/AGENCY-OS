@@ -39,7 +39,8 @@ export async function submitRequestAction(
   _prev: RequestState,
   form: FormData,
 ): Promise<RequestState> {
-  const { session, supabase } = await requireClient();
+  // Re-checks the session: a server action is reachable by direct POST.
+  const { session } = await requireClient();
 
   const text = String(form.get('text') ?? '').trim();
   const requestId = String(form.get('request_id') ?? '');
@@ -47,8 +48,8 @@ export async function submitRequestAction(
   if (!text) return { requestId, error: 'Please write something first.' };
 
   const step = requestId
-    ? await continueRequest(supabase, session.clientId, requestId, text)
-    : await startRequest(supabase, session.clientId, text, await callerIp());
+    ? await continueRequest(session.clientId, requestId, text)
+    : await startRequest(session.clientId, text, await callerIp());
 
   revalidatePath('/portal');
   return toState(step);

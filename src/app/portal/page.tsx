@@ -7,7 +7,6 @@
  */
 
 import { requireClient } from '@/lib/auth';
-import { forClient, type RequestRow } from '@/portal/requestPolicy';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,24 +19,24 @@ type VisibleWork = {
 };
 
 export default async function PortalHome() {
-  const { session, supabase } = await requireClient();
+  const { supabase } = await requireClient();
 
-  // Reads the restricted view, not the table: internal dates and estimates
-  // are not columns it has.
+  // Every read here goes through a portal projection. A client session has
+  // no policy on tasks, client_requests or clients at all, so an internal
+  // date cannot be reached even by calling the API directly (INV-8).
   const [workRes, updatesRes, requestsRes, clientRes] = await Promise.all([
     supabase.from('client_visible_work')
       .select('id, title, client_status, completed_at, created_at')
       .order('created_at', { ascending: false }),
-    supabase.from('client_updates')
+    supabase.from('client_published_updates')
       .select('id, body_md, published_at, period_start, period_end')
-      .eq('status', 'published')
       .order('published_at', { ascending: false })
       .limit(12),
-    supabase.from('client_requests')
-      .select('id, state, raw_input, draft, operator_note, operator_note_visible, created_at')
+    supabase.from('client_request_status')
+      .select('id, state, title, note, created_at')
       .order('created_at', { ascending: false })
       .limit(8),
-    supabase.from('clients').select('name').eq('id', session.clientId).maybeSingle(),
+    supabase.from('client_profile').select('name').maybeSingle(),
   ]);
 
   const work = (workRes.data ?? []) as VisibleWork[];
@@ -46,7 +45,7 @@ export default async function PortalHome() {
   const waiting = work.filter((w) => w.client_status === 'waiting');
   const upcoming = work.filter((w) => w.client_status === 'upcoming').slice(0, 6);
 
-  const requests = (requestsRes.data ?? []).map((r) => forClient(r as RequestRow));
+  const requests = (requestsRes.data ?? []) as { id: string; state: string; title: string; note: string | null }[];
   const openRequests = requests.filter((r) => r.state === 'clarifying' || r.state === 'pending_approval');
   const decided = requests.filter((r) => r.state === 'approved' || r.state === 'rejected');
 
