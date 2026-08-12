@@ -1,80 +1,110 @@
 /**
- * Environment access, validated at boot.
+ * Environment access.
  *
- * Anything the app cannot function without is checked eagerly by
- * `assertEnv()` (called from instrumentation) so a missing secret fails at
- * startup rather than at 3am inside a cron job.
+ * Missing configuration is reported, never thrown blindly: a getter that
+ * throws inside middleware takes the whole site down with a platform-level
+ * error that says nothing about what is wrong. `configStatus()` answers
+ * the same question without throwing, and the middleware uses it to show
+ * something a person can act on.
  */
 
-function required(name: string): string {
-  const value = process.env[name];
+/** Accept either name. Plenty of people set SUPABASE_URL out of habit. */
+function firstOf(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function required(value: string | undefined, name: string): string {
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
 
-function optional(name: string): string | undefined {
-  return process.env[name] || undefined;
-}
+export const SUPABASE_URL_NAMES = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
+export const SUPABASE_ANON_NAMES = ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'] as const;
 
 export const env = {
-  // Supabase
-  get SUPABASE_URL() { return required('NEXT_PUBLIC_SUPABASE_URL'); },
-  get SUPABASE_ANON_KEY() { return required('NEXT_PUBLIC_SUPABASE_ANON_KEY'); },
-  get SUPABASE_SERVICE_ROLE_KEY() { return required('SUPABASE_SERVICE_ROLE_KEY'); },
+  get SUPABASE_URL() {
+    return required(firstOf(...SUPABASE_URL_NAMES), 'NEXT_PUBLIC_SUPABASE_URL');
+  },
+  get SUPABASE_ANON_KEY() {
+    return required(firstOf(...SUPABASE_ANON_NAMES), 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  },
+  get SUPABASE_SERVICE_ROLE_KEY() {
+    return required(process.env.SUPABASE_SERVICE_ROLE_KEY, 'SUPABASE_SERVICE_ROLE_KEY');
+  },
 
-  // The one address allowed to hold an operator session.
-  get OPERATOR_EMAIL() { return required('OPERATOR_EMAIL').trim().toLowerCase(); },
+  /** The one address allowed to hold an operator session. */
+  get OPERATOR_EMAIL() {
+    return required(process.env.OPERATOR_EMAIL, 'OPERATOR_EMAIL').trim().toLowerCase();
+  },
 
-  // LLM
-  get MOONSHOT_API_KEY() { return required('MOONSHOT_API_KEY'); },
+  get MOONSHOT_API_KEY() {
+    return required(process.env.MOONSHOT_API_KEY, 'MOONSHOT_API_KEY');
+  },
 
-  // Shared secrets for machine callers
-  get CRON_SECRET() { return required('CRON_SECRET'); },
-  get MCP_SECRET() { return required('MCP_SECRET'); },
+  get CRON_SECRET() { return required(process.env.CRON_SECRET, 'CRON_SECRET'); },
+  get MCP_SECRET() { return required(process.env.MCP_SECRET, 'MCP_SECRET'); },
 
-  // Web push
-  get VAPID_PUBLIC_KEY() { return required('VAPID_PUBLIC_KEY'); },
-  get VAPID_PRIVATE_KEY() { return required('VAPID_PRIVATE_KEY'); },
-  get VAPID_SUBJECT() { return required('VAPID_SUBJECT'); },
+  get VAPID_PUBLIC_KEY() { return required(process.env.VAPID_PUBLIC_KEY, 'VAPID_PUBLIC_KEY'); },
+  get VAPID_PRIVATE_KEY() { return required(process.env.VAPID_PRIVATE_KEY, 'VAPID_PRIVATE_KEY'); },
+  get VAPID_SUBJECT() { return required(process.env.VAPID_SUBJECT, 'VAPID_SUBJECT'); },
 
-  get APP_URL() { return process.env.APP_URL ?? 'http://localhost:3000'; },
+  get APP_URL() {
+    // APP_BASE_URL is the older name, still set on existing deployments.
+    // Vercel also supplies the deployment host, so this works before anyone
+    // remembers to set it by hand at all.
+    if (process.env.APP_URL) return process.env.APP_URL;
+    if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL;
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+    return 'http://localhost:3000';
+  },
 
-  // Transport only: magic links and approved client updates.
-  RESEND_API_KEY: optional('RESEND_API_KEY'),
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 };
 
-/** Names that must be present for the app to boot at all. */
-const REQUIRED_AT_BOOT = [
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'OPERATOR_EMAIL',
-  'CRON_SECRET',
-  'MCP_SECRET',
+/** Without these the app cannot serve a single page. */
+const REQUIRED = [
+  { label: 'NEXT_PUBLIC_SUPABASE_URL', present: () => Boolean(firstOf(...SUPABASE_URL_NAMES)) },
+  { label: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', present: () => Boolean(firstOf(...SUPABASE_ANON_NAMES)) },
+  { label: 'SUPABASE_SERVICE_ROLE_KEY', present: () => Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) },
+  { label: 'OPERATOR_EMAIL', present: () => Boolean(process.env.OPERATOR_EMAIL) },
+  { label: 'CRON_SECRET', present: () => Boolean(process.env.CRON_SECRET) },
+  { label: 'MCP_SECRET', present: () => Boolean(process.env.MCP_SECRET) },
 ] as const;
 
-/**
- * Secrets that are allowed to be absent — the feature they power degrades
- * instead of the app failing. Push simply does not send; AI falls back.
- */
-const DEGRADES_IF_MISSING = [
-  'VAPID_PUBLIC_KEY',
-  'VAPID_PRIVATE_KEY',
-  'VAPID_SUBJECT',
-  'MOONSHOT_API_KEY',
+/** Present but the feature they power simply switches off. */
+const OPTIONAL = [
+  { label: 'MOONSHOT_API_KEY', present: () => Boolean(process.env.MOONSHOT_API_KEY), effect: 'AI falls back to deterministic paths' },
+  { label: 'VAPID_PUBLIC_KEY', present: () => Boolean(process.env.VAPID_PUBLIC_KEY), effect: 'push notifications are not sent' },
+  { label: 'VAPID_PRIVATE_KEY', present: () => Boolean(process.env.VAPID_PRIVATE_KEY), effect: 'push notifications are not sent' },
+  { label: 'VAPID_SUBJECT', present: () => Boolean(process.env.VAPID_SUBJECT), effect: 'push notifications are not sent' },
 ] as const;
 
-export function assertEnv(): { ok: boolean; missing: string[]; degraded: string[] } {
-  const missing = REQUIRED_AT_BOOT.filter((n) => !process.env[n]);
-  const degraded = DEGRADES_IF_MISSING.filter((n) => !process.env[n]);
+export type ConfigStatus = {
+  ok: boolean;
+  missing: string[];
+  degraded: { name: string; effect: string }[];
+};
 
-  if (missing.length) {
+/** Never throws. Safe to call from middleware. */
+export function configStatus(): ConfigStatus {
+  const missing = REQUIRED.filter((v) => !v.present()).map((v) => v.label);
+  const degraded = OPTIONAL.filter((v) => !v.present()).map((v) => ({ name: v.label, effect: v.effect }));
+  return { ok: missing.length === 0, missing, degraded };
+}
+
+export function assertEnv(): ConfigStatus {
+  const status = configStatus();
+  if (!status.ok) {
     throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}. `
-      + 'See .env.example.',
+      `Missing required environment variables: ${status.missing.join(', ')}. See .env.example.`,
     );
   }
-  return { ok: true, missing: [], degraded: [...degraded] };
+  return status;
 }
 
 export function pushConfigured(): boolean {

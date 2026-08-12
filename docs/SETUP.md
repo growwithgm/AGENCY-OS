@@ -59,18 +59,48 @@ you are developing.
 
 ## 3. Environment variables
 
-Copy `.env.example` to `.env.local` (or set them in Vercel).
+On Vercel: **Project → Settings → Environment Variables**. Locally: copy
+`.env.example` to `.env.local`.
 
-| Variable | Where to find it |
+### Required — without these no page loads
+
+| Variable | Where it comes from |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project Settings → API → Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Project Settings → API → anon public |
-| `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API → service_role — **server only, never expose** |
-| `OPERATOR_EMAIL` | Your own address. This one address is the agency side. |
-| `APP_URL` | `https://your-app.vercel.app` |
-| `CRON_SECRET`, `MCP_SECRET` | Any long random strings |
-| `MOONSHOT_API_KEY` | Optional — without it the AI falls back and everything still works |
-| `VAPID_*` | Optional — `npx web-push generate-vapid-keys` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → **API** → Project URL. Looks like `https://abcdefgh.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page → **anon public** key. Safe in a browser; that is what it is for. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same page → **service_role** key. Bypasses all security — server only, never in a `NEXT_PUBLIC_` variable, never in the browser. |
+| `OPERATOR_EMAIL` | Your own email address. This single address is the agency side. |
+| `CRON_SECRET` | Invent one: `openssl rand -base64 32` |
+| `MCP_SECRET` | Invent one: `openssl rand -base64 32` |
+
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are accepted as alternative names
+for the first two, so an older deployment does not need renaming.
+
+### Optional — the feature switches off, the app keeps working
+
+| Variable | Missing means |
+|---|---|
+| `MOONSHOT_API_KEY` | Every AI job uses its deterministic fallback |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No push notifications. Generate with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` is `mailto:you@example.com` |
+| `APP_URL` | Falls back to the Vercel deployment URL. `APP_BASE_URL` is accepted as the older name. |
+
+### After adding them, redeploy
+
+Environment variables are read when the app builds and boots. Values added
+to a running deployment do not reach it until you redeploy.
+
+### Checking what is missing
+
+Visit `/api/health` on the deployment. It lists the names of missing
+variables — never their values — and works even when nothing else does,
+which is exactly when you need it:
+
+```json
+{ "ok": false, "missing_required": ["OPERATOR_EMAIL"], "features_off": [] }
+```
+
+If a variable is missing, every page shows a plain list of what to add
+rather than a platform error.
 
 `OPERATOR_EMAIL` is enforced when the link is requested, not merely hidden
 afterwards: any other address gets the same "check your email" screen and
