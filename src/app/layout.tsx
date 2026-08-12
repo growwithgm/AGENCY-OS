@@ -1,9 +1,21 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: 'Agency OS',
-  description: 'Task capture → AI structuring → auto scheduling → client reporting',
+  description: 'Task capture, scheduling aur client reporting',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, title: 'Agency OS', statusBarStyle: 'black-translucent' },
+  icons: {
+    icon: '/icons/icon-192.png',
+    apple: '/icons/apple-touch-icon.png',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0f1115',
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

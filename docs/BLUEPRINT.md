@@ -98,14 +98,20 @@ Ye qawaneen tool descriptions mein likhe hain (`src/mcp/tools.ts`), taake har MC
 
 ### AI jobs (Kimi)
 
-| Job | Model | effort | Input | Kaam |
+Har job ka model, `reasoning_effort` aur token cap ek jagah hai:
+**`src/ai/jobs.config.ts`**. Call sites wahan se parhte hain, apni values
+nahi rakhte — cost tuning ek file se hoti hai.
+
+| Job | Model | effort | max tokens | Kaam |
 |---|---|---|---|---|
-| `daily_briefing` | `kimi-k3` | low | `get_briefing` JSON | 100-150 alfaz ki briefing |
-| `overload_advice` | `kimi-k3` | high | overflow + at_risk + capacity + client context | 2-3 options, har ek mein trade-off |
-| `ask_advice` | `kimi-k3` | low | briefing JSON + operator ka sawal | Seedha jawab |
-| `estimate_insight` | `kimi-k2.5` | — | 30 din ka est vs actual | Kahan andaza ghalat hota hai |
-| `weekly_report` | `kimi-k3` | low | task history | Client draft |
-| `monthly_report` | `kimi-k3` | high | task history | Client draft |
+| `daily_briefing` | `kimi-k3` | low | 1200 | 100-150 alfaz ki briefing |
+| `weekly_report` | `kimi-k3` | low | 1500 | Client draft |
+| `monthly_report` | `kimi-k3` | high | 2500 | Client draft |
+| `overload_advice` | `kimi-k3` | high | 800 | 2-3 options, har ek mein trade-off |
+| `ask_advice` | `kimi-k3` | high | 1500 | Briefing data par sawal ka jawab |
+| `estimate_insight` | `kimi-k2.5` | — | 800 | Kahan andaza ghalat hota hai |
+
+`max` effort kisi job par nahi — ek test isay enforce karta hai.
 
 ### Judgement layer ka usool
 
@@ -166,6 +172,24 @@ MCP secret operator-grade access deta hai — client portal token se bilkul alag
 
 ---
 
+## 11. Notifications (Web Push / PWA)
+
+Operator ko khabar Web Push se pohanchti hai — koi Discord, koi email.
+App PWA hai (`manifest.json` + `sw.js`); iOS par push tabhi chalta hai jab
+site "Add to Home Screen" se install ho, aur settings page ye hidayat khud
+dikhata hai.
+
+**Bunyadi usool:** notification ka *matn* AI likh sakta hai, lekin *kab aur
+kyun bhejni hai* ye faisla hamesha deterministic code karta hai
+(`src/push/triggers.ts`). Halka din khamoshi se guzarta hai — khali
+notification bharne se log notifications band kar dete hain.
+
+- Har notification par `tag` — purani replace hoti hai, stack nahi hoti
+- Overload aur stale alerts par dedupe key: wahi masla dobara ho to khamosh
+- 404/410 par subscription delete (device gaya); 5 fail par deactivate
+- Har send `notification_log` mein — jo cheez skip hui, uski wajah samet
+- Har kism ka apna toggle + master switch (`notification_settings`)
+
 ## 12. Reporting Pipeline
 
 ```
@@ -184,7 +208,12 @@ Delivery ka waahid channel **portal** hai: approve hote hi report RLS ke zariye 
 | Job | Waqt | Kaam |
 |---|---|---|
 | nightly | 02:00 | schedule rebuild; overdue tasks par `needs_review` flag; job queue drain |
+| morning | 08:30 | Aaj ka plan (push) — halka din ho to nahi |
+| overload | 08:35 | Overload alert (push) — sirf jab overflow/at-risk ho |
+| evening | 18:00 | Sham ka check (push) — sirf jab tasks adhoore hon |
+| stale | Mon 09:00 | 3+ baar shift hone wale tasks (push) |
 | weekly | Fri 17:00 | har active client ka weekly draft; estimate insight |
+| report-drafts | Fri 17:05 | Approve ka intezar karti reports (push) |
 | monthly | 1st 09:00 | har active client ka monthly draft |
 
 Idempotent; `x-cron-secret` header (ya Vercel cron ka Bearer) auth.

@@ -29,7 +29,8 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 | `src/tasks/` | Shared task operations — MCP aur web dono yahi call karte hain |
 | `src/mcp/` + `src/app/api/mcp/` | MCP server (8 tools) |
 | `src/briefing/` | Deterministic briefing data + at_risk/stale classification (tests ke saath) |
-| `src/ai/` | `runAI()` wrapper, prompts, judgement layer, daily/weekly cache |
+| `src/ai/` | `runAI()` wrapper, `jobs.config.ts` (model/effort/tokens), prompts, judgement layer, cache |
+| `src/push/` | Web Push delivery, send policy (tested), notification triggers |
 | `src/reporting/` | Draft generation (task history se) + approval |
 | `src/jobs/` | Job queue worker |
 | `src/app/api/cron/` | Nightly / weekly / monthly |
@@ -121,6 +122,36 @@ Do hisse hain:
 AI ko sirf taiyar JSON milta hai — wo khud DB query nahi karta. Classification (at_risk, stale, overflow, capacity) deterministic code mein hai aur tested hai. AI schedule badalne ki **tajweez** de sakta hai, schedule **bana** nahi sakta.
 
 Briefing aur advice `ai_cache` table mein roz ek dafa banti hain; dashboard par refresh button aaj ka cache girata hai. Provider down ho to dashboard ka baqi hissa phir bhi chalta hai.
+
+## Push notifications (PWA)
+
+VAPID keys banayein:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Output ki public key **do** env vars mein jati hai (`VAPID_PUBLIC_KEY` aur `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — dono same), private key sirf `VAPID_PRIVATE_KEY` mein, aur `VAPID_SUBJECT` mein apna `mailto:` address.
+
+Phir `/settings` par jaa kar **Enable notifications** dabayein.
+
+**iPhone/iPad:** Safari par push tabhi chalta hai jab site home screen par install ho — **Share → Add to Home Screen**, phir usi icon se kholain. Settings page iOS detect kar ke ye hidayat khud dikha deta hai.
+
+### Kab kya jati hai
+
+| Notification | Waqt (PKT) | Shart |
+|---|---|---|
+| Aaj ka plan | 08:30 roz | Din halka ho to **nahi** jati |
+| Overload alert | 08:35 roz | Sirf jab overflow ya at-risk ho; wahi masla dobara ho to khamosh |
+| Sham ka check | 18:00 roz | Sirf jab aaj ke tasks adhoore hon |
+| Report drafts | Fri 17:05 | Sirf jab draft pending ho |
+| Bar-bar shift hone wale tasks | Mon 09:00 | Sirf jab koi task 3+ baar move ho chuka ho |
+
+Content AI likh sakta hai, lekin **bhejne ka faisla hamesha deterministic code karta hai** — halka din khamoshi se guzarta hai. Har notification par tag hota hai taake purani replace ho, stack na ho. Mar chuke devices (404/410) khud delete ho jate hain; 5 baar fail hone par subscription deactivate.
+
+Sab toggles `/settings` par hain (master switch samet), device list aur test button ke saath.
+
+⚠️ Vercel Hobby plan par sirf 2 cron jobs allowed hain — poora set (8) Pro plan maangta hai, ya kisi bahar ke scheduler se `/api/cron/*` hit karein (`x-cron-secret` header ke saath).
 
 ## Reports
 

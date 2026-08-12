@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { schedule } from './engine';
+import { plannedDays, rescheduleUpdates } from './reschedule';
 import type { ScheduleResult } from './types';
 
 const HORIZON_DAYS = 14;
@@ -15,7 +16,9 @@ export async function rebuildSchedule(now = new Date()): Promise<ScheduleResult>
 
   const [{ data: tasks }, { data: deps }, { data: rules }, { data: blackouts }, { data: locked }] =
     await Promise.all([
-      s.from('tasks').select('id, client_id, status, priority, est_minutes, due_at').neq('status', 'done'),
+      s.from('tasks')
+        .select('id, client_id, status, priority, est_minutes, due_at, reschedule_count, last_scheduled_for')
+        .neq('status', 'done'),
       s.from('task_dependencies').select('task_id, depends_on'),
       s.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
       s.from('blackouts').select('starts_at, ends_at'),
@@ -69,6 +72,22 @@ export async function rebuildSchedule(now = new Date()): Promise<ScheduleResult>
   const scheduledIds = [...new Set(result.blocks.map((b) => b.task_id))];
   if (scheduledIds.length) {
     await s.from('tasks').update({ status: 'scheduled' }).in('id', scheduledIds).eq('status', 'backlog');
+  }
+
+  // count tasks whose planned day moved — the signal behind the stale alert
+  const previous: Record<string, string | null> = {};
+  const counts: Record<string, number> = {};
+  for (const t of tasks ?? []) {
+    previous[t.id] = t.last_scheduled_for ?? null;
+    counts[t.id] = t.reschedule_count ?? 0;
+  }
+
+  for (const u of rescheduleUpdates(previous, plannedDays(result.blocks))) {
+    if (previous[u.task_id] === u.day) continue; // nothing changed, skip the write
+    await s.from('tasks').update({
+      last_scheduled_for: u.day,
+      ...(u.moved ? { reschedule_count: (counts[u.task_id] ?? 0) + 1 } : {}),
+    }).eq('id', u.task_id);
   }
 
   return result;

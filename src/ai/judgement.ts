@@ -1,8 +1,11 @@
 // The judgement layer: AI reads the briefing JSON and gives an opinion.
 // It never writes schedule_blocks, never sets priority, never touches the
 // database at all — these functions take data in and return prose out.
+//
+// Model / effort / token caps come from src/ai/jobs.config.ts.
 
 import { runAI } from './runAI';
+import { jobConfig } from './jobs.config';
 import {
   ASK_ADVICE_SYSTEM, DAILY_BRIEFING_SYSTEM,
   ESTIMATE_INSIGHT_SYSTEM, OVERLOAD_ADVICE_SYSTEM,
@@ -11,13 +14,14 @@ import { cached, dayKey, weekKey } from './cache';
 import { buildBriefing, estimateHistory, type Briefing, type EstimateHistory } from '@/briefing/data';
 
 export async function dailyBriefingText(briefing: Briefing): Promise<string> {
+  const cfg = jobConfig('daily_briefing');
   const { result } = await runAI<string>({
     kind: 'daily_briefing',
-    model: 'kimi-k3',
-    effort: 'low',
+    model: cfg.model,
+    effort: cfg.effort,
     system: DAILY_BRIEFING_SYSTEM,
     messages: [{ role: 'user', content: JSON.stringify(briefing, null, 2) }],
-    maxTokens: 1200,
+    maxTokens: cfg.maxTokens,
   });
   return result ?? '';
 }
@@ -28,10 +32,11 @@ export function needsOverloadAdvice(briefing: Briefing): boolean {
 }
 
 export async function overloadAdviceText(briefing: Briefing): Promise<string> {
+  const cfg = jobConfig('overload_advice');
   const { result } = await runAI<string>({
     kind: 'overload_advice',
-    model: 'kimi-k3',
-    effort: 'high', // trade-offs across clients and deadlines is real reasoning work
+    model: cfg.model,
+    effort: cfg.effort,
     system: OVERLOAD_ADVICE_SYSTEM,
     messages: [{
       role: 'user',
@@ -44,38 +49,41 @@ export async function overloadAdviceText(briefing: Briefing): Promise<string> {
         clients: briefing.clients,
       }, null, 2),
     }],
-    maxTokens: 800,
+    maxTokens: cfg.maxTokens,
   });
   return result ?? '';
 }
 
 export async function estimateInsightText(history: EstimateHistory): Promise<string> {
+  const cfg = jobConfig('estimate_insight');
   const { result } = await runAI<string>({
     kind: 'estimate_insight',
-    model: 'kimi-k2.5', // pattern-spotting over a small table — no deep reasoning needed
+    model: cfg.model,
+    effort: cfg.effort,
     system: ESTIMATE_INSIGHT_SYSTEM,
     messages: [{ role: 'user', content: JSON.stringify(history, null, 2) }],
-    maxTokens: 800,
+    maxTokens: cfg.maxTokens,
   });
   return result ?? '';
 }
 
 export async function askAdviceText(briefing: Briefing, question: string): Promise<string> {
+  const cfg = jobConfig('ask_advice');
   const { result } = await runAI<string>({
     kind: 'ask_advice',
-    model: 'kimi-k3',
-    effort: 'low',
+    model: cfg.model,
+    effort: cfg.effort,
     system: ASK_ADVICE_SYSTEM,
     messages: [{
       role: 'user',
       content: `Data:\n${JSON.stringify(briefing, null, 2)}\n\nOperator ka sawal: ${question}`,
     }],
-    maxTokens: 1200,
+    maxTokens: cfg.maxTokens,
   });
   return result ?? '';
 }
 
-// ── Cached entry points (used by the dashboard) ────────────────────
+// ── Cached entry points (used by the dashboard and cron) ───────────
 
 export async function cachedDailyBriefing(briefing?: Briefing, now = new Date()) {
   const data = briefing ?? await buildBriefing(now);

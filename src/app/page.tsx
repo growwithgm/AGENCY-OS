@@ -86,7 +86,7 @@ export default async function Dashboard() {
       )}
 
       {briefing.overflow.length > 0 && (
-        <section style={{ ...card, border: '1px solid #a3541e' }}>
+        <section id="overflow" style={{ ...card, border: '1px solid #a3541e' }}>
           <strong>⚠️ {briefing.overflow_hours}h ka kaam horizon mein fit nahi hua</strong>
           <ul>
             {briefing.overflow.map((t) => (
@@ -155,7 +155,7 @@ export default async function Dashboard() {
       </section>
 
       {briefing.stale.length > 0 && (
-        <section style={card}>
+        <section id="stale" style={card}>
           <h2 style={{ fontSize: 17 }}>Purane backlog tasks ({briefing.stale.length})</h2>
           <ul>
             {briefing.stale.slice(0, 10).map((t) => (
