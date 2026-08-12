@@ -30,6 +30,7 @@ Cron  ──► /api/cron/{nightly,weekly,monthly}
 | `src/connectors/` | Meta / Windsor (Google+GA4) / Shopify → idempotent snapshots + health tracking |
 | `src/jobs/` | Job queue worker (report generation request-time par nahi chalti) |
 | `src/commands/` | `/today /week /done /block /client /report /approve /replan` handlers |
+| `src/mcp/` + `src/app/api/mcp/` | MCP server — Claude ko connect karne ke liye (read + write) |
 | `src/app/api/bot/` | Bot-facing endpoints (`x-bot-secret`) |
 | `src/app/api/cron/` | Nightly / weekly / monthly (`x-cron-secret` ya Vercel cron Bearer) |
 | `src/app/c/[token]/` | Client portal — token → scoped JWT → har query RLS se |
@@ -75,6 +76,47 @@ Bot outbound-only connect karta hai — koi port forwarding, static IP ya tunnel
 - `SHOPIFY_SHOPS` — JSON `{ "<brand_slug>": { "domain": "...", "token": "env:VAR" } }`
 
 Missing config = wo connector us client ke liye skip; failure = `connection_health` + Discord notification.
+
+## MCP — Claude ko connect karna (read + write)
+
+Deploy hone ke baad `/api/mcp` par ek MCP server chalta hai (Streamable HTTP). `MCP_SECRET` env mein lamba random string rakhein — unset ho to endpoint band rehta hai.
+
+**claude.ai (web/mobile)** — Settings → Connectors → Add custom connector:
+
+```
+https://<aapka-app>.vercel.app/api/mcp?key=<MCP_SECRET>
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport http agency-os https://<aapka-app>.vercel.app/api/mcp \
+  --header "Authorization: Bearer <MCP_SECRET>"
+```
+
+**Claude Desktop** — Settings → Developer → Edit Config:
+
+```json
+{
+  "mcpServers": {
+    "agency-os": {
+      "type": "http",
+      "url": "https://<aapka-app>.vercel.app/api/mcp",
+      "headers": { "Authorization": "Bearer <MCP_SECRET>" }
+    }
+  }
+}
+```
+
+### Tools
+
+**Read:** `list_clients`, `get_client`, `list_tasks`, `get_schedule` (overflow samet), `list_reports`, `get_report`, `get_metrics`, `get_ai_usage` (token/cost visibility)
+
+**Write:** `create_task`, `update_task`, `complete_task`, `block_task`, `add_blackout`, `replan`, `generate_report` (sirf draft banata hai), `approve_report` (invariant-3 gate — sirf operator ke kehne par), `deliver_report`
+
+Sab tools database-scoped hain (invariant 10) — koi shell ya filesystem access nahi. Writes ke baad scheduler khud rebuild hota hai. Reports wala safeguard MCP se bhi qaim hai: draft bina approval ke client tak nahi ja sakta — `deliver_report` draft bhejne se inkaar kar deta hai.
+
+⚠️ MCP secret operator-grade access deta hai — ye client portal token se bilkul alag cheez hai. Kisi client ko kabhi na dein.
 
 ## Tests
 
