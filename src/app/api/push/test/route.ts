@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
+import { operatorOrNull } from '@/lib/auth';
 import { sendPush } from '@/push/send';
 
-/** Test notification — bypasses the per-type toggles on purpose. */
+/** Test notification. Operator only, and it ignores the per-kind toggles. */
 export async function POST() {
+  const session = await operatorOrNull();
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
   const result = await sendPush('test', {
-    title: 'Agency OS test',
-    body: 'Notifications kaam kar rahi hain ✅',
-    url: '/settings',
-    tag: 'agency-os-test',
+    title: 'Ledger',
+    body: 'Notifications are working on this device.',
+    url: '/availability',
+    tag: 'ledger-test',
   }, { ignoreSettings: true });
 
   return NextResponse.json(result);

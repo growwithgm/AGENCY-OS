@@ -1,5 +1,5 @@
 {
-  "name": "agency-os",
+  "name": "ledger",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.45.0",
     "jose": "^5.9.0",
     "mcp-handler": "^2.1.0",

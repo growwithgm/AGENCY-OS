@@ -1,0 +1,77 @@
+'use client';
+
+import { useActionState } from 'react';
+import { submitRequestAction, type RequestState } from './actions';
+import { RECEIVED_MESSAGE } from '@/portal/messages';
+
+const MAX_STEPS = 3;
+
+/**
+ * Conversational intake, one question at a time.
+ *
+ * It never promises a date, never implies acceptance, and never shows the
+ * word "scheduled". The last line is the whole contract.
+ */
+export function RequestFlow() {
+  const [state, action, pending] = useActionState<RequestState, FormData>(submitRequestAction, {});
+
+  if (state.done) {
+    return (
+      <section>
+        <h2 style={{ marginBottom: 12 }}>Received</h2>
+        <p>{RECEIVED_MESSAGE}</p>
+        <p style={{ marginTop: 24 }}>
+          <a href="/portal">Back to your page</a>
+        </p>
+      </section>
+    );
+  }
+
+  const asking = Boolean(state.question);
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="request_id" value={state.requestId ?? ''} />
+
+      {asking ? (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 10 }}>
+            {state.index ?? 1} of {MAX_STEPS}
+          </div>
+          <h2 style={{ marginBottom: 8 }}>{state.question}</h2>
+          {state.hint && <p style={{ marginBottom: 16 }}>{state.hint}</p>}
+        </>
+      ) : (
+        <>
+          <h2 style={{ marginBottom: 8 }}>What do you need?</h2>
+          <p style={{ marginBottom: 16 }}>
+            Tell us in your own words. We&rsquo;ll ask a couple of short questions after this.
+          </p>
+        </>
+      )}
+
+      <label className="sr-only" htmlFor="text">Your answer</label>
+      <textarea
+        id="text"
+        name="text"
+        required
+        rows={asking ? 3 : 5}
+        className="input"
+        key={state.question ?? 'first'}
+        placeholder={asking ? '' : 'We want to start selling to salons, not just direct customers.'}
+        autoFocus
+      />
+
+      {state.error && <p className="error" style={{ marginTop: 10 }}>{state.error}</p>}
+
+      <button type="submit" className="btn btn--primary" disabled={pending} style={{ marginTop: 14 }}>
+        {pending ? 'Sending…' : asking ? 'Send' : 'Continue'}
+      </button>
+
+      <p className="tiny dim" style={{ marginTop: 16, fontFamily: 'var(--sans)' }}>
+        This is a request, not a commitment. The agency will confirm what they can take on
+        and when.
+      </p>
+    </form>
+  );
+}

@@ -1,40 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { isCronAuthorized } from '@/lib/apiAuth';
-import { db } from '@/lib/db';
-import { rebuildSchedule } from '@/scheduler/rebuild';
-import { drainJobs } from '@/jobs/worker';
-import { expireStaleRequests } from '@/requests/flow';
+import { NextResponse, type NextRequest } from 'next/server';
+import { isCronAuthorised } from '@/lib/machineAuth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { replan } from '@/data/planning';
+import { refreshSignals } from '@/data/attention';
+import { generateDueOccurrences } from '@/data/recurrence';
+import { pruneRateLimitEvents } from '@/lib/rateLimit';
 
 export const maxDuration = 300;
 
-/** Nightly 02:00 PKT: full schedule rebuild + overdue flags + job drain. Idempotent. */
-export async function GET(req: NextRequest) {
-  if (!isCronAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-
-  const sched = await rebuildSchedule();
-
-  // overdue open tasks get flagged for the dashboard's review list
-  const { data: overdue } = await db()
-    .from('tasks')
-    .select('id')
-    .neq('status', 'done')
-    .eq('needs_review', false)
-    .lt('due_at', new Date().toISOString());
-
-  if (overdue?.length) {
-    await db().from('tasks').update({ needs_review: true }).in('id', overdue.map((t) => t.id));
+/**
+ * Nightly: generate recurring work, re-plan, refresh attention signals,
+ * housekeeping. Idempotent — running it twice changes nothing.
+ *
+ * Cron has no session, so it is the one legitimate service-role caller.
+ */
+export async function GET(request: NextRequest) {
+  if (!isCronAuthorised(request)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const expiredRequests = await expireStaleRequests();
-  const jobs = await drainJobs();
+  const db = supabaseAdmin();
+
+  const generated = await generateDueOccurrences(db);
+  const planResult = await replan(db);
+  const signals = await refreshSignals(db);
+  const pruned = await pruneRateLimitEvents();
 
   return NextResponse.json({
     ok: true,
-    blocks: sched.blocks.length,
-    overflow: sched.overflow.length,
-    cycles: sched.cycles.length,
-    overdueFlagged: overdue?.length ?? 0,
-    expiredRequests,
-    jobs,
+    recurringGenerated: generated,
+    blocks: planResult.blocks.length,
+    atRisk: planResult.atRisk.length,
+    signals: signals.length,
+    rateLimitRowsPruned: pruned,
   });
 }

@@ -1,42 +1,51 @@
-// Web Push delivery. Every send is logged; dead subscriptions are pruned
-// automatically so a lost device never blocks future notifications.
+/**
+ * Web push delivery — the operator's own devices only.
+ *
+ * Notifications carry attention signals, which are detected
+ * deterministically. AI may phrase a body; it never decides that something
+ * is worth sending.
+ */
 
 import webpush from 'web-push';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { pushConfigured } from '@/lib/env';
 import { subscriptionOutcome } from './policy';
 
 export type NotificationKind =
-  | 'morning_briefing' | 'overload_alert' | 'evening_check'
-  | 'report_drafts' | 'stale_tasks' | 'client_request' | 'test';
+  | 'attention' | 'client_request' | 'test';
 
 export type PushPayload = {
   title: string;
   body: string;
   url?: string;
-  tag?: string;      // same tag replaces the older notification instead of stacking
+  /** Same tag replaces an older notification instead of stacking. */
+  tag?: string;
 };
 
 let configured = false;
+
 function configure(): boolean {
   if (configured) return true;
-  const pub = process.env.VAPID_PUBLIC_KEY;
-  const priv = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT;
-  if (!pub || !priv || !subject) return false;
-  webpush.setVapidDetails(subject, pub, priv);
+  if (!pushConfigured()) return false;
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT!,
+    process.env.VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!,
+  );
   configured = true;
   return true;
 }
 
-/** Missing row = enabled. The master switch turns everything off at once. */
+/** A missing row means enabled; the master switch turns everything off. */
 export async function notificationsEnabled(kind: NotificationKind): Promise<boolean> {
-  const { data } = await db()
+  const { data } = await supabaseAdmin()
     .from('notification_settings')
     .select('kind, enabled')
     .in('kind', ['master', kind]);
 
   const master = (data ?? []).find((r) => r.kind === 'master');
   if (master && master.enabled === false) return false;
+
   const own = (data ?? []).find((r) => r.kind === kind);
   return own ? own.enabled !== false : true;
 }
@@ -48,45 +57,47 @@ export async function sendPush(
   payload: PushPayload,
   opts: { dedupeKey?: string; ignoreSettings?: boolean } = {},
 ): Promise<SendResult> {
-  const log = async (r: SendResult) => {
-    await db().from('notification_log').insert({
+  const db = supabaseAdmin();
+
+  const log = async (result: SendResult): Promise<SendResult> => {
+    await db.from('notification_log').insert({
       kind,
       title: payload.title,
       body: payload.body,
       dedupe_key: opts.dedupeKey ?? null,
-      sent_count: r.sent,
-      failed_count: r.failed,
-      skipped: r.skipped ?? null,
+      sent_count: result.sent,
+      failed_count: result.failed,
+      skipped: result.skipped ?? null,
     });
-    return r;
+    return result;
   };
 
-  if (!configure()) return log({ sent: 0, failed: 0, skipped: 'VAPID keys not configured' });
+  if (!configure()) return log({ sent: 0, failed: 0, skipped: 'push keys not configured' });
+
   if (!opts.ignoreSettings && !(await notificationsEnabled(kind))) {
     return log({ sent: 0, failed: 0, skipped: 'disabled in settings' });
   }
 
-  // same situation as the last send of this kind → stay quiet
+  // The same unresolved condition must not be sent twice.
   if (opts.dedupeKey) {
-    const { data: prev } = await db()
-      .from('notification_log')
+    const { data: previous } = await db.from('notification_log')
       .select('dedupe_key')
       .eq('kind', kind)
       .gt('sent_count', 0)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (prev?.dedupe_key === opts.dedupeKey) {
-      return log({ sent: 0, failed: 0, skipped: 'duplicate of last notification' });
+
+    if (previous?.dedupe_key === opts.dedupeKey) {
+      return log({ sent: 0, failed: 0, skipped: 'already notified' });
     }
   }
 
-  const { data: subs } = await db()
-    .from('push_subscriptions')
+  const { data: subscriptions } = await db.from('push_subscriptions')
     .select('id, endpoint, p256dh, auth, failure_count')
     .eq('active', true);
 
-  if (!subs?.length) return log({ sent: 0, failed: 0, skipped: 'no active subscriptions' });
+  if (!subscriptions?.length) return log({ sent: 0, failed: 0, skipped: 'no devices subscribed' });
 
   const body = JSON.stringify({
     title: payload.title,
@@ -98,29 +109,31 @@ export async function sendPush(
   let sent = 0;
   let failed = 0;
 
-  for (const sub of subs) {
+  for (const sub of subscriptions) {
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         body,
-        { TTL: 60 * 60 },
+        { TTL: 3600 },
       );
       sent++;
-      await db().from('push_subscriptions')
+      await db.from('push_subscriptions')
         .update({ last_success_at: new Date().toISOString(), failure_count: 0 })
         .eq('id', sub.id);
     } catch (e) {
       failed++;
       const status = (e as { statusCode?: number }).statusCode;
       const outcome = subscriptionOutcome(status, sub.failure_count ?? 0);
+
       if (outcome === 'delete') {
-        await db().from('push_subscriptions').delete().eq('id', sub.id);
+        // The browser threw the subscription away; the row is dead weight.
+        await db.from('push_subscriptions').delete().eq('id', sub.id);
       } else if (outcome === 'deactivate') {
-        await db().from('push_subscriptions')
+        await db.from('push_subscriptions')
           .update({ active: false, failure_count: (sub.failure_count ?? 0) + 1 })
           .eq('id', sub.id);
       } else {
-        await db().from('push_subscriptions')
+        await db.from('push_subscriptions')
           .update({ failure_count: (sub.failure_count ?? 0) + 1 })
           .eq('id', sub.id);
       }

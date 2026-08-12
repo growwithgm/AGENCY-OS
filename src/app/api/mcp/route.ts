@@ -1,44 +1,41 @@
-// MCP endpoint (Streamable HTTP) — Claude ko Agency OS se jorne ke liye.
-// Auth: MCP_SECRET, teen shaklon mein qubool:
-//   · Authorization: Bearer <secret>   (Claude Code / Desktop --header)
-//   · x-mcp-secret: <secret>
-//   · ?key=<secret>                    (claude.ai custom connector URL)
-// Secret ke baghair 401 — ye operator-grade surface hai, portal nahi.
-
 import { createMcpHandler } from 'mcp-handler';
+import type { NextRequest } from 'next/server';
+import { isMcpAuthorised } from '@/lib/machineAuth';
 import { registerTools } from '@/mcp/tools';
 
 export const maxDuration = 120;
 
+/**
+ * MCP endpoint — a machine caller, authenticated by shared secret rather
+ * than a session, so it is one of the two legitimate service-role users.
+ *
+ * The tools it exposes are read-and-propose only: it can see the plan and
+ * park a capture in the Inbox, but it cannot confirm work, set a priority,
+ * approve a request or publish an update. Those are all decisions
+ * (INV-1, INV-3, INV-4, INV-7).
+ */
 const handler = createMcpHandler(
   (server) => registerTools(server),
   {
-    serverInfo: { name: 'agency-os', version: '0.1.0' },
+    serverInfo: { name: 'ledger', version: '1.0.0' },
     instructions:
-      'Agency OS — single-operator agency ka operations system. ' +
-      'Tasks, schedule (deterministic engine), metrics aur client reports yahan se manage hote hain. ' +
-      'Reports hamesha draft se shuru hoti hain; approve_report human-approval gate hai — ' +
-      'sirf operator ke saaf kehne par chalao. Client-visible cheezein portal par turant dikhti hain.',
+      'Ledger — a capacity-aware work operating system for one operator. '
+      + 'It answers whether promised work fits before its deadlines. '
+      + 'You can read the plan and park captures in the Inbox for review. '
+      + 'You cannot set priority, confirm work, approve client requests or '
+      + 'publish anything to a client: those are the operator\'s decisions '
+      + 'and live in the web app only.',
   },
 );
 
-function authorized(req: Request): boolean {
-  const secret = process.env.MCP_SECRET;
-  if (!secret) return false; // unset = surface band
-  const auth = req.headers.get('authorization');
-  if (auth === `Bearer ${secret}`) return true;
-  if (req.headers.get('x-mcp-secret') === secret) return true;
-  return new URL(req.url).searchParams.get('key') === secret;
-}
-
-function withAuth(req: Request): Promise<Response> | Response {
-  if (!authorized(req)) {
+function guard(request: NextRequest): Promise<Response> | Response {
+  if (!isMcpAuthorised(request)) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
-  return handler(req);
+  return handler(request);
 }
 
-export { withAuth as GET, withAuth as POST, withAuth as DELETE };
+export { guard as GET, guard as POST, guard as DELETE };

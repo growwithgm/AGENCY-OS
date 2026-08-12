@@ -3,21 +3,21 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Agency OS',
-  description: 'Task capture, scheduling aur client reporting',
+  title: 'Ledger',
+  description: 'A capacity-aware work operating system',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, title: 'Agency OS', statusBarStyle: 'black-translucent' },
-  icons: {
-    icon: '/icons/icon-192.png',
-    apple: '/icons/apple-touch-icon.png',
-  },
+  appleWebApp: { capable: true, title: 'Ledger', statusBarStyle: 'default' },
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f1115',
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover',   // lets the safe-area padding in globals.css work
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F1F1EE' },
+    { media: '(prefers-color-scheme: dark)', color: '#0A0B0D' },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

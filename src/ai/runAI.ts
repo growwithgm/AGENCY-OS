@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { env } from '@/lib/env';
 
 // Kimi is OpenAI-compatible — standard SDK, different base URL (spec §8.1).
@@ -30,7 +30,7 @@ async function logRun(row: {
 }) {
   // Reasoning tokens are billed as output tokens — usage must be logged
   // as returned, or cost estimates will be wrong (spec §8.2, §8.5).
-  await db().from('ai_runs').insert({
+  await supabaseAdmin().from('ai_runs').insert({
     kind: row.kind,
     model: row.model,
     input_tokens: row.usage?.prompt_tokens ?? null,
