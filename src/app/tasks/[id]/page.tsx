@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { blockTaskAction, completeTaskAction, updateTaskAction } from '../actions';
-import { button, buttonGreen, buttonSubtle, card, input, label, link, muted, Nav } from '../../ui';
+import { Nav } from '../../ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,106 +26,104 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       .eq('task_id', id).order('starts_at'),
   ]);
 
-  if (!task) return <main style={{ padding: 24 }}>Task nahi mila.</main>;
+  if (!task) return <main className="container">Task nahi mila.</main>;
   const client = task.clients as unknown as { name: string } | null;
 
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+    <main className="container container--narrow">
       <Nav />
-      <h1 style={{ fontSize: 20 }}>{task.title}</h1>
-      <p style={muted}>
+      <h1>{task.title}</h1>
+      <p className="muted small">
         {client?.name ?? '—'} · {task.status}
         {task.completed_at ? ` · done ${task.completed_at.slice(0, 10)}` : ''}
         {task.actual_minutes ? ` · ${task.actual_minutes} min lage` : ''}
+        {task.reschedule_count > 0 ? ` · ${task.reschedule_count} baar shift hua` : ''}
       </p>
 
-      {task.raw_input && (
-        <p style={{ ...muted, fontSize: 13 }}>Capture: <code>{task.raw_input}</code></p>
-      )}
+      {task.raw_input && <p className="muted tiny">Capture: <code>{task.raw_input}</code></p>}
 
-      <section style={card}>
-        <h2 style={{ fontSize: 16 }}>Edit</h2>
-        <form action={updateTaskAction} style={{ display: 'grid', gap: 10 }}>
+      <section className="card">
+        <h2>Edit</h2>
+        <form action={updateTaskAction} className="stack">
           <input type="hidden" name="task_id" value={task.id} />
 
           <div>
-            <label style={label}>Title</label>
-            <input name="title" defaultValue={task.title} style={input} />
+            <label className="label">Title</label>
+            <input name="title" defaultValue={task.title} className="input" />
           </div>
 
           <div>
-            <label style={label}>Client-facing title (khali = wahi title)</label>
-            <input name="client_title" defaultValue={task.client_title ?? ''} style={input} />
+            <label className="label">Client-facing title (khali = wahi title)</label>
+            <input name="client_title" defaultValue={task.client_title ?? ''} className="input" />
           </div>
 
           <div>
-            <label style={label}>Description</label>
-            <textarea name="description" rows={3} defaultValue={task.description ?? ''} style={input} />
+            <label className="label">Description</label>
+            <textarea name="description" rows={3} defaultValue={task.description ?? ''} className="input" />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div className="grid grid--tight">
             <div>
-              <label style={label}>Priority</label>
-              <select name="priority" defaultValue={String(task.priority)} style={input}>
+              <label className="label">Priority</label>
+              <select name="priority" defaultValue={String(task.priority)} className="input">
                 {PRIORITIES.map((p) => <option key={p} value={p}>P{p}</option>)}
               </select>
             </div>
             <div>
-              <label style={label}>Estimate (min)</label>
-              <input name="est_minutes" type="number" min={5} defaultValue={task.est_minutes ?? 60} style={input} />
+              <label className="label">Estimate (min)</label>
+              <input name="est_minutes" type="number" min={5} defaultValue={task.est_minutes ?? 60} className="input" />
             </div>
             <div>
-              <label style={label}>Status</label>
-              <select name="status" defaultValue={task.status === 'done' ? 'backlog' : task.status} style={input}>
+              <label className="label">Status</label>
+              <select name="status" defaultValue={task.status === 'done' ? 'backlog' : task.status} className="input">
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label style={label}>Due</label>
-            <input name="due_at" type="datetime-local" defaultValue={toLocalInput(task.due_at)} style={input} />
+            <label className="label">Due</label>
+            <input name="due_at" type="datetime-local" defaultValue={toLocalInput(task.due_at)} className="input" />
           </div>
 
-          <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
-            <label>
+          <div className="btn-row">
+            <label className="check">
               <input name="client_visible" type="checkbox" defaultChecked={task.client_visible} /> Client ko dikhe
             </label>
-            <label>
+            <label className="check">
               <input name="needs_review" type="checkbox" defaultChecked={task.needs_review} /> Review darkar
             </label>
           </div>
 
-          <div><button type="submit" style={buttonGreen}>Save</button></div>
+          <div><button type="submit" className="btn btn--green">Save</button></div>
         </form>
       </section>
 
       {task.status !== 'done' && (
-        <section style={card}>
-          <h2 style={{ fontSize: 16 }}>Actions</h2>
-          <form action={completeTaskAction} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <section className="card">
+          <h2>Actions</h2>
+          <form action={completeTaskAction} className="btn-row" style={{ marginBottom: 12 }}>
             <input type="hidden" name="task_id" value={task.id} />
             <input name="actual_minutes" type="number" min={1} placeholder="Kitne min lage"
-              style={{ ...input, width: 160 }} />
-            <button type="submit" style={button}>Mark done</button>
+              className="input" style={{ flex: '1 1 160px' }} />
+            <button type="submit" className="btn">Mark done</button>
           </form>
-          <form action={blockTaskAction} style={{ display: 'flex', gap: 8 }}>
+          <form action={blockTaskAction} className="btn-row">
             <input type="hidden" name="task_id" value={task.id} />
-            <input name="reason" required placeholder="Kis cheez ka intezar hai" style={input} />
-            <button type="submit" style={buttonSubtle}>Block</button>
+            <input name="reason" required placeholder="Kis cheez ka intezar hai"
+              className="input" style={{ flex: '1 1 200px' }} />
+            <button type="submit" className="btn btn--subtle">Block</button>
           </form>
-          {task.blocked_reason && (
-            <p style={{ ...muted, marginTop: 8 }}>Abhi blocked: {task.blocked_reason}</p>
-          )}
+          {task.blocked_reason && <p className="muted small">Abhi blocked: {task.blocked_reason}</p>}
         </section>
       )}
 
-      <section style={card}>
-        <h2 style={{ fontSize: 16 }}>Scheduled blocks</h2>
+      <section className="card">
+        <h2>Scheduled blocks</h2>
         {(blocks ?? []).length === 0 && (
-          <p style={muted}>Koi block nahi — ye task overflow mein hai ya done ho chuka.</p>
+          <p className="muted">Koi block nahi — ye task overflow mein hai ya done ho chuka.</p>
         )}
-        <ul>
+        <ul className="list">
           {(blocks ?? []).map((b, i) => (
             <li key={i}>
               {new Date(b.starts_at).toLocaleString('en-GB')} → {new Date(b.ends_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
@@ -135,7 +133,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         </ul>
       </section>
 
-      <a href="/tasks" style={link}>← Tasks</a>
+      <p><a href="/tasks">← Tasks</a></p>
     </main>
   );
 }

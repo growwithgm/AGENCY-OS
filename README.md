@@ -20,6 +20,8 @@ Cron  ──► /api/cron/*  (schedule rebuild, report drafts, notifications)
 
 Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek tez raasta hai: baat-cheet se task banana, edit karna, schedule dekhna.
 
+Dono side (operator dashboard aur client portal) mobile-first hain: 390px par bhi koi horizontal scroll nahi, tap targets 44px, iOS par input focus se zoom nahi hota, aur PWA install hone par safe-area padding lagti hai. Layout auto-fit grids aur flex-wrap se collapse hota hai — breakpoints kam se kam.
+
 ## Repo layout
 
 | Path | Kya hai |
@@ -36,6 +38,7 @@ Web **primary surface** hai — har kaam wahan se ho sakta hai. Claude us par ek
 | `src/jobs/` | Job queue worker |
 | `src/app/api/cron/` | Schedule rebuild, report drafts, notification triggers |
 | `src/app/` | Dashboard, task CRUD, requests queue, report approve, settings |
+| `src/app/globals.css` | Mobile-first styles — sab pages yahi classes istemal karte hain |
 | `src/app/c/[token]/` | Client portal — token → scoped JWT → har query RLS se |
 
 ## Setup

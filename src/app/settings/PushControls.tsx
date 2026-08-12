@@ -4,7 +4,6 @@
 // permission prompt, service worker registration, PushManager.
 
 import { useEffect, useState } from 'react';
-import { button, buttonSubtle, muted } from '../ui';
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -98,10 +97,10 @@ export function PushControls({ vapidPublicKey }: { vapidPublicKey: string | null
 
   return (
     <div>
-      {state === 'checking' && <p style={muted}>Check kar rahe hain…</p>}
+      {state === 'checking' && <p className="muted">Check kar rahe hain…</p>}
 
       {state === 'ios-needs-install' && (
-        <p style={{ ...muted, lineHeight: 1.6 }}>
+        <p className="muted small">
           iPhone/iPad par notifications tabhi chalti hain jab ye app home screen par install ho.
           Safari mein <strong>Share → Add to Home Screen</strong> karein, phir home screen wale
           icon se kholain aur yahan wapas aayein.
@@ -109,26 +108,26 @@ export function PushControls({ vapidPublicKey }: { vapidPublicKey: string | null
       )}
 
       {state === 'unsupported' && (
-        <p style={muted}>Is browser mein Web Push support nahi hai.</p>
+        <p className="muted">Is browser mein Web Push support nahi hai.</p>
       )}
 
       {state === 'denied' && (
-        <p style={muted}>
+        <p className="muted small">
           Notifications block ho chuki hain. Browser ki site settings se permission
           allow karein, phir page reload karein.
         </p>
       )}
 
-      {state === 'off' && <button onClick={enable} style={button}>Enable notifications</button>}
+      {state === 'off' && <button onClick={enable} className="btn">Enable notifications</button>}
 
       {state === 'on' && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={test} style={button}>Test notification</button>
-          <button onClick={disable} style={buttonSubtle}>Is device par band karo</button>
+        <div className="btn-row">
+          <button onClick={test} className="btn">Test notification</button>
+          <button onClick={disable} className="btn btn--subtle">Is device par band karo</button>
         </div>
       )}
 
-      {msg && <p style={{ ...muted, marginTop: 8 }}>{msg}</p>}
+      {msg && <p className="muted small">{msg}</p>}
     </div>
   );
 }

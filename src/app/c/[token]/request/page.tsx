@@ -10,8 +10,8 @@ export default async function RequestPage({ params }: { params: Promise<{ token:
 
   if (!session) {
     return (
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 20 }}>Enlace no válido</h1>
+      <main className="container container--narrow">
+        <h1>Enlace no válido</h1>
         <p>Este enlace ha caducado o ha sido revocado.</p>
       </main>
     );
@@ -23,10 +23,11 @@ export default async function RequestPage({ params }: { params: Promise<{ token:
   const en = locale.startsWith('en');
 
   return (
-    <main style={{ maxWidth: 640, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ fontSize: 22 }}>{en ? 'Request work' : 'Solicitar trabajo'}</h1>
-      <p style={{ color: '#9aa3b2' }}>{client?.name}</p>
+    <main className="container container--narrow">
+      <h1>{en ? 'Request work' : 'Solicitar trabajo'}</h1>
+      <p className="muted small">{client?.name}</p>
       <RequestForm token={token} locale={locale} />
+      <p><a href={`/c/${token}`}>← {en ? 'Back' : 'Volver'}</a></p>
     </main>
   );
 }

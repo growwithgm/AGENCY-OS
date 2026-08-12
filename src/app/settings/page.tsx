@@ -7,7 +7,7 @@ import {
   addBlackoutAction, removeBlackoutAction, removeDeviceAction,
   saveCapacityAction, saveNotificationSettingsAction,
 } from './actions';
-import { button, buttonGreen, buttonSubtle, card, input, label, muted, Nav } from '../ui';
+import { fmtDateTime, Nav } from '../ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,63 +41,63 @@ export default async function SettingsPage() {
   const ruleFor = (weekday: number) => (rules ?? []).find((r) => r.weekday === weekday);
 
   return (
-    <main style={{ maxWidth: 760, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ fontSize: 22 }}>Settings</h1>
+    <main className="container container--narrow">
+      <h1>Settings</h1>
       <Nav />
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Notifications</h2>
+      <section className="card">
+        <h2>Notifications</h2>
         <PushControls vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null} />
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Kya kya bheji jayen</h2>
+      <section className="card">
+        <h2>Kya kya bheji jayen</h2>
         <form action={saveNotificationSettingsAction}>
-          <div style={{ borderBottom: '1px solid #2a2f3a', paddingBottom: 10, marginBottom: 10 }}>
-            <label style={{ fontSize: 15 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 6, marginBottom: 6 }}>
+            <label className="check">
               <input type="checkbox" name="master" defaultChecked={enabled('master')} />
-              {' '}<strong>Sab notifications</strong> — off karein to neeche wali sab band
+              <span><strong>Sab notifications</strong> — off karein to neeche wali sab band</span>
             </label>
           </div>
           {NOTIFICATION_KINDS.map((n) => (
-            <div key={n.kind} style={{ padding: '6px 0' }}>
-              <label>
-                <input type="checkbox" name={n.kind} defaultChecked={enabled(n.kind)} /> {n.title}
+            <div key={n.kind}>
+              <label className="check">
+                <input type="checkbox" name={n.kind} defaultChecked={enabled(n.kind)} />
+                <span>{n.title}</span>
               </label>
-              <div style={{ ...muted, fontSize: 12, paddingLeft: 22 }}>{n.when}</div>
+              <div className="muted tiny" style={{ paddingLeft: 26, marginTop: -8, marginBottom: 4 }}>
+                {n.when}
+              </div>
             </div>
           ))}
-          <button type="submit" style={{ ...buttonGreen, marginTop: 10 }}>Save</button>
+          <button type="submit" className="btn btn--green" style={{ marginTop: 10 }}>Save</button>
         </form>
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Registered devices ({(devices ?? []).length})</h2>
-        {(devices ?? []).length === 0 && <p style={muted}>Abhi koi device register nahi.</p>}
+      <section className="card">
+        <h2>Registered devices ({(devices ?? []).length})</h2>
+        {(devices ?? []).length === 0 && <p className="muted">Abhi koi device register nahi.</p>}
         {(devices ?? []).map((d) => (
-          <div key={d.id} style={{
-            borderTop: '1px solid #2a2f3a', padding: '8px 0',
-            display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center',
-          }}>
-            <div style={{ fontSize: 13 }}>
+          <div key={d.id} className="item">
+            <div className="item__main small">
               {d.user_agent ?? 'Unknown device'}
-              <div style={muted}>
-                {d.last_success_at ? `Aakhri baar ${new Date(d.last_success_at).toLocaleString('en-GB')}` : 'Abhi tak koi notification nahi gayi'}
+              <div className="item__meta">
+                {d.last_success_at ? `Aakhri baar ${fmtDateTime(d.last_success_at)}` : 'Abhi tak koi notification nahi gayi'}
                 {!d.active && ' · deactivated'}
                 {d.failure_count > 0 && ` · ${d.failure_count} fail`}
               </div>
             </div>
             <form action={removeDeviceAction}>
               <input type="hidden" name="id" value={d.id} />
-              <button type="submit" style={buttonSubtle}>Remove</button>
+              <button type="submit" className="btn btn--subtle btn--sm">Remove</button>
             </form>
           </div>
         ))}
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Working hours</h2>
-        <p style={{ ...muted, fontSize: 13, marginTop: 0 }}>
+      <section className="card">
+        <h2>Working hours</h2>
+        <p className="muted small">
           Daily cap wo waqt hai jo aap waqai kaam mein de sakte hain — window se kam rakhna
           normal hai. Scheduler isi ko sach maanta hai.
         </p>
@@ -105,69 +105,72 @@ export default async function SettingsPage() {
           {WEEKDAYS.map((name, weekday) => {
             const r = ruleFor(weekday);
             return (
-              <div key={weekday} style={{
-                display: 'grid', gridTemplateColumns: '130px 1fr 1fr 1fr',
-                gap: 8, alignItems: 'center', padding: '4px 0',
-              }}>
-                <label style={{ fontSize: 14 }}>
-                  <input type="checkbox" name={`enabled_${weekday}`} defaultChecked={!!r} /> {name}
+              <div key={weekday} className="cap-row">
+                <label className="check cap-row__day">
+                  <input type="checkbox" name={`enabled_${weekday}`} defaultChecked={!!r} />
+                  <span>{name}</span>
                 </label>
-                <input name={`start_${weekday}`} type="time" defaultValue={r?.start_time?.slice(0, 5) ?? '09:00'} style={input} />
-                <input name={`end_${weekday}`} type="time" defaultValue={r?.end_time?.slice(0, 5) ?? '17:00'} style={input} />
-                <input name={`cap_${weekday}`} type="number" min={30} step={30}
-                  defaultValue={r?.max_minutes ?? 360} style={input} title="Daily cap (minutes)" />
+                <input name={`start_${weekday}`} type="time" className="input"
+                  defaultValue={r?.start_time?.slice(0, 5) ?? '09:00'} aria-label={`${name} start`} />
+                <input name={`end_${weekday}`} type="time" className="input"
+                  defaultValue={r?.end_time?.slice(0, 5) ?? '17:00'} aria-label={`${name} end`} />
+                <div className="cap-row__cap">
+                  <span className="label cap-row__hint">Daily cap (minutes)</span>
+                  <input name={`cap_${weekday}`} type="number" min={30} step={30} className="input"
+                    defaultValue={r?.max_minutes ?? 360} aria-label={`${name} daily cap in minutes`}
+                    title="Daily cap (minutes)" />
+                </div>
               </div>
             );
           })}
-          <button type="submit" style={{ ...buttonGreen, marginTop: 10 }}>Save aur replan</button>
+          <button type="submit" className="btn btn--green" style={{ marginTop: 12 }}>Save aur replan</button>
         </form>
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Blackouts</h2>
-        <form action={addBlackoutAction} style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'end',
-        }}>
-          <div>
-            <label style={label}>Start</label>
-            <input name="starts_at" type="datetime-local" required style={input} />
+      <section className="card">
+        <h2>Blackouts</h2>
+        <form action={addBlackoutAction} className="stack">
+          <div className="grid grid--tight">
+            <div>
+              <label className="label">Start</label>
+              <input name="starts_at" type="datetime-local" required className="input" />
+            </div>
+            <div>
+              <label className="label">End</label>
+              <input name="ends_at" type="datetime-local" required className="input" />
+            </div>
+            <div>
+              <label className="label">Wajah</label>
+              <input name="reason" placeholder="Chhutti / meeting" className="input" />
+            </div>
           </div>
-          <div>
-            <label style={label}>End</label>
-            <input name="ends_at" type="datetime-local" required style={input} />
-          </div>
-          <div>
-            <label style={label}>Wajah</label>
-            <input name="reason" placeholder="Chhutti / meeting" style={input} />
-          </div>
-          <button type="submit" style={button}>Add</button>
+          <div><button type="submit" className="btn">Add</button></div>
         </form>
 
         {(blackouts ?? []).map((b) => (
-          <div key={b.id} style={{
-            borderTop: '1px solid #2a2f3a', padding: '8px 0',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            <span style={{ fontSize: 13 }}>
-              {new Date(b.starts_at).toLocaleString('en-GB')} → {new Date(b.ends_at).toLocaleString('en-GB')}
-              {b.reason && <span style={muted}> · {b.reason}</span>}
-            </span>
+          <div key={b.id} className="item">
+            <div className="item__main small">
+              {fmtDateTime(b.starts_at)} → {fmtDateTime(b.ends_at)}
+              {b.reason && <div className="item__meta">{b.reason}</div>}
+            </div>
             <form action={removeBlackoutAction}>
               <input type="hidden" name="id" value={b.id} />
-              <button type="submit" style={buttonSubtle}>Remove</button>
+              <button type="submit" className="btn btn--subtle btn--sm">Remove</button>
             </form>
           </div>
         ))}
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Pichli notifications</h2>
-        {(recent ?? []).length === 0 && <p style={muted}>Abhi tak koi nahi.</p>}
-        <ul style={{ fontSize: 13 }}>
+      <section className="card">
+        <h2>Pichli notifications</h2>
+        {(recent ?? []).length === 0 && <p className="muted">Abhi tak koi nahi.</p>}
+        <ul className="list small">
           {(recent ?? []).map((n, i) => (
             <li key={i}>
-              {new Date(n.created_at).toLocaleString('en-GB')} · {n.kind} ·{' '}
-              {n.skipped ? <span style={muted}>skip: {n.skipped}</span> : `${n.sent_count} device(s)`}
+              {fmtDateTime(n.created_at)} · {n.kind}
+              <div className="item__meta">
+                {n.skipped ? `skip: ${n.skipped}` : `${n.sent_count} device(s)`}
+              </div>
             </li>
           ))}
         </ul>

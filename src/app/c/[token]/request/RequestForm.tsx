@@ -35,25 +35,12 @@ export function RequestForm({ token, locale }: { token: string; locale: string }
     {},
   );
 
-  const card: React.CSSProperties = {
-    background: '#171a21', borderRadius: 12, padding: '16px 20px', marginBottom: 16,
-  };
-  const input: React.CSSProperties = {
-    background: '#0f1115', color: '#e6e8ee', border: '1px solid #2a2f3a',
-    borderRadius: 8, padding: '10px 12px', fontSize: 15, width: '100%',
-    fontFamily: 'inherit',
-  };
-  const button: React.CSSProperties = {
-    background: '#2b4c7e', color: 'white', border: 'none',
-    borderRadius: 8, padding: '10px 20px', fontSize: 15, cursor: 'pointer',
-  };
-
   // finished — the request is with the agency now
   if (state.message) {
     return (
-      <section style={card}>
-        <p style={{ lineHeight: 1.6 }}>{state.message}</p>
-        <a href={`/c/${token}`} style={{ color: '#7aa2f7' }}>{t.back}</a>
+      <section className="card">
+        <p>{state.message}</p>
+        <a href={`/c/${token}`}>{t.back}</a>
       </section>
     );
   }
@@ -63,29 +50,25 @@ export function RequestForm({ token, locale }: { token: string; locale: string }
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="request_id" value={state.requestId ?? ''} />
 
-      <section style={card}>
-        <p style={{ marginTop: 0, lineHeight: 1.6 }}>
-          {state.question ?? t.prompt}
-        </p>
+      <section className="card">
+        <p style={{ marginTop: 0 }}>{state.question ?? t.prompt}</p>
 
         <textarea
           name="text"
           rows={state.question ? 3 : 5}
           required
           placeholder={state.question ? '' : t.placeholder}
-          style={input}
+          className="input"
           key={state.question ?? 'initial'}
         />
 
-        {state.error && (
-          <p style={{ color: '#e0806a', fontSize: 14 }}>{state.error}</p>
-        )}
+        {state.error && <p className="error">{state.error}</p>}
 
-        <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button type="submit" disabled={pending} style={{ ...button, opacity: pending ? 0.6 : 1 }}>
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button type="submit" disabled={pending} className="btn">
             {pending ? t.sending : state.question ? t.answer : t.send}
           </button>
-          <span style={{ color: '#9aa3b2', fontSize: 13 }}>{t.note}</span>
+          <span className="muted small">{t.note}</span>
         </div>
       </section>
     </form>

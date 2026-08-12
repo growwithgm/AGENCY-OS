@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Agency OS',
@@ -16,19 +17,13 @@ export const viewport: Viewport = {
   themeColor: '#0f1115',
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',   // lets the safe-area padding in globals.css work
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body style={{
-        margin: 0,
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
-        background: '#0f1115',
-        color: '#e6e8ee',
-      }}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

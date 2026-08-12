@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/db';
 import { addBlackoutAction, completeTaskAction, createTaskAction } from './actions';
-import { button, buttonGreen, card, input, label, link, muted, Nav } from '../ui';
+import { Nav } from '../ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +15,8 @@ const PRIORITIES = [
   { value: 4, text: '4 — Low' },
   { value: 5, text: '5 — Someday' },
 ];
+
+const STATUS_FILTERS = ['backlog', 'scheduled', 'in_progress', 'blocked', 'done'];
 
 export default async function TasksPage({
   searchParams,
@@ -38,83 +40,77 @@ export default async function TasksPage({
   const { data: tasks } = await q;
 
   return (
-    <main style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ fontSize: 22 }}>Tasks</h1>
+    <main className="container">
+      <h1>Tasks</h1>
       <Nav />
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Naya task</h2>
-        <form action={createTaskAction} style={{ display: 'grid', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <section className="card">
+        <h2>Naya task</h2>
+        <form action={createTaskAction} className="stack">
+          <div className="grid grid--wide">
             <div>
-              <label style={label}>Client</label>
-              <select name="client_id" required style={input}>
+              <label className="label">Client</label>
+              <select name="client_id" required className="input">
                 {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={label}>Priority (aap ka faisla)</label>
-              <select name="priority" required defaultValue="3" style={input}>
+              <label className="label">Priority (aap ka faisla)</label>
+              <select name="priority" required defaultValue="3" className="input">
                 {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.text}</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label style={label}>Title</label>
-            <input name="title" required placeholder="Meta creative refresh" style={input} />
+            <label className="label">Title</label>
+            <input name="title" required placeholder="Meta creative refresh" className="input" />
           </div>
 
           <div>
-            <label style={label}>Description (optional)</label>
-            <textarea name="description" rows={2} style={input} />
+            <label className="label">Description (optional)</label>
+            <textarea name="description" rows={2} className="input" />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+          <div className="grid grid--tight">
             <div>
-              <label style={label}>Estimate (minutes)</label>
-              <input name="est_minutes" type="number" min={5} defaultValue={60} style={input} />
+              <label className="label">Estimate (minutes)</label>
+              <input name="est_minutes" type="number" min={5} defaultValue={60} className="input" />
             </div>
             <div>
-              <label style={label}>Due (optional)</label>
-              <input name="due_at" type="datetime-local" style={input} />
+              <label className="label">Due (optional)</label>
+              <input name="due_at" type="datetime-local" className="input" />
             </div>
-            <label style={{ fontSize: 13, paddingBottom: 8 }}>
-              <input name="client_visible" type="checkbox" defaultChecked /> Client ko dikhe
-            </label>
           </div>
 
-          <div><button type="submit" style={buttonGreen}>Task banao</button></div>
+          <label className="check">
+            <input name="client_visible" type="checkbox" defaultChecked /> Client ko dikhe
+          </label>
+
+          <div><button type="submit" className="btn btn--green">Task banao</button></div>
         </form>
       </section>
 
-      <section style={card}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: 15 }}>Filter:</strong>
-          <a href="/tasks" style={link}>sab</a>
-          {['backlog', 'scheduled', 'in_progress', 'blocked', 'done'].map((s) => (
-            <a key={s} href={`/tasks?status=${s}`} style={link}>{s}</a>
-          ))}
-          <span style={muted}>|</span>
+      <section className="card">
+        <div className="nav">
+          <a href="/tasks">sab</a>
+          {STATUS_FILTERS.map((s) => <a key={s} href={`/tasks?status=${s}`}>{s}</a>)}
           {(clients ?? []).map((c) => (
-            <a key={c.id} href={`/tasks?client=${c.brand_slug}`} style={link}>{c.name}</a>
+            <a key={c.id} href={`/tasks?client=${c.brand_slug}`}>{c.name}</a>
           ))}
         </div>
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>{tasks?.length ?? 0} task(s)</h2>
+      <section className="card">
+        <h2>{tasks?.length ?? 0} task(s)</h2>
         {(tasks ?? []).map((t) => {
           const c = t.clients as unknown as { name: string } | null;
           return (
-            <div key={t.id} style={{
-              borderTop: '1px solid #2a2f3a', padding: '10px 0',
-              display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center',
-            }}>
-              <div>
-                <a href={`/tasks/${t.id}`} style={link}><strong>{t.title}</strong></a>
-                {t.needs_review && <span style={{ color: '#c9b03d' }}> · review darkar</span>}
-                <div style={{ fontSize: 13, ...muted }}>
+            <div key={t.id} className="item">
+              <div className="item__main">
+                <a href={`/tasks/${t.id}`}><strong>{t.title}</strong></a>
+                {t.needs_review && <span className="badge">review</span>}
+                <div className="item__meta">
                   {c?.name ?? '—'} · {t.status} · P{t.priority} · {t.est_minutes ?? '?'}min
                   {t.due_at ? ` · due ${t.due_at.slice(0, 10)}` : ''}
                   {!t.client_visible && ' · internal'}
@@ -122,11 +118,11 @@ export default async function TasksPage({
                 </div>
               </div>
               {t.status !== 'done' && (
-                <form action={completeTaskAction} style={{ display: 'flex', gap: 6 }}>
+                <form action={completeTaskAction} className="btn-row">
                   <input type="hidden" name="task_id" value={t.id} />
                   <input name="actual_minutes" type="number" min={1} placeholder="min"
-                    style={{ ...input, width: 70 }} />
-                  <button type="submit" style={button}>Done</button>
+                    className="input" style={{ width: 90 }} />
+                  <button type="submit" className="btn btn--sm">Done</button>
                 </form>
               )}
             </div>
@@ -134,22 +130,24 @@ export default async function TasksPage({
         })}
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Blackout add karo</h2>
-        <form action={addBlackoutAction} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
-          <div>
-            <label style={label}>Start</label>
-            <input name="starts_at" type="datetime-local" required style={input} />
+      <section className="card">
+        <h2>Blackout add karo</h2>
+        <form action={addBlackoutAction} className="stack">
+          <div className="grid grid--tight">
+            <div>
+              <label className="label">Start</label>
+              <input name="starts_at" type="datetime-local" required className="input" />
+            </div>
+            <div>
+              <label className="label">End</label>
+              <input name="ends_at" type="datetime-local" required className="input" />
+            </div>
+            <div>
+              <label className="label">Wajah</label>
+              <input name="reason" placeholder="Chhutti / meeting" className="input" />
+            </div>
           </div>
-          <div>
-            <label style={label}>End</label>
-            <input name="ends_at" type="datetime-local" required style={input} />
-          </div>
-          <div>
-            <label style={label}>Wajah</label>
-            <input name="reason" placeholder="Chhutti / meeting" style={input} />
-          </div>
-          <button type="submit" style={button}>Add</button>
+          <div><button type="submit" className="btn">Add</button></div>
         </form>
       </section>
     </main>

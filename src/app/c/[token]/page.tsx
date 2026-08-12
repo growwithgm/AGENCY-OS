@@ -1,6 +1,8 @@
 // Client portal (spec §5): token link → scoped JWT → every query through RLS.
 // Never shows: operator calendar, other clients, internal tasks,
 // est/actual minutes, draft reports, or the operator's private notes.
+//
+// Opened on a phone almost always — layout is mobile-first.
 
 import { resolvePortalToken } from '@/lib/portalAuth';
 import { scopedDb } from '@/lib/db';
@@ -15,6 +17,8 @@ const T = {
     waiting: 'esperando', weekly: 'Semanal', monthly: 'Mensual', neu: 'Nuevo',
     requests: 'Tus solicitudes', request: 'Solicitar trabajo',
     pending: 'En revisión', approved: 'Aceptada', declined: 'No aceptada',
+    invalid: 'Enlace no válido',
+    invalidBody: 'Este enlace ha caducado o ha sido revocado. Pide uno nuevo a tu contacto en GROW NEST.',
   },
   en: {
     panel: 'client panel', upcoming: 'In progress / Upcoming', nothing: 'Nothing pending right now.',
@@ -22,6 +26,8 @@ const T = {
     waiting: 'waiting', weekly: 'Weekly', monthly: 'Monthly', neu: 'New',
     requests: 'Your requests', request: 'Request work',
     pending: 'Under review', approved: 'Accepted', declined: 'Not accepted',
+    invalid: 'Invalid link',
+    invalidBody: 'This link has expired or been revoked. Ask your GROW NEST contact for a new one.',
   },
 };
 
@@ -31,9 +37,9 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
 
   if (!session) {
     return (
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 20 }}>Enlace no válido</h1>
-        <p>Este enlace ha caducado o ha sido revocado. Pide uno nuevo a tu contacto en GROW NEST.</p>
+      <main className="container container--narrow">
+        <h1>{T.es.invalid}</h1>
+        <p>{T.es.invalidBody}</p>
       </main>
     );
   }
@@ -67,79 +73,72 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
     clarifying: t.pending, pending_approval: t.pending, approved: t.approved, rejected: t.declined,
   };
 
-  const card: React.CSSProperties = {
-    background: '#171a21', borderRadius: 12, padding: '16px 20px', marginBottom: 16,
-  };
-
   return (
-    <main style={{ maxWidth: 640, margin: '0 auto', padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+    <main className="container container--narrow">
+      <div className="page-head">
         <div>
-          <h1 style={{ fontSize: 22, marginBottom: 0 }}>{client?.name}</h1>
-          <p style={{ color: '#9aa3b2', marginTop: 4 }}>GROW NEST — {t.panel}</p>
+          <h1>{client?.name}</h1>
+          <p className="muted small">GROW NEST — {t.panel}</p>
         </div>
-        <a href={`/c/${token}/request`} style={{
-          background: '#2b4c7e', color: 'white', borderRadius: 8,
-          padding: '10px 16px', fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap',
-        }}>
+        <a href={`/c/${token}/request`} className="btn" style={{ textDecoration: 'none' }}>
           + {t.request}
         </a>
       </div>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>{t.upcoming}</h2>
+      <section className="card">
+        <h2>{t.upcoming}</h2>
         {upcoming.length === 0 && <p>{t.nothing}</p>}
-        <ul>
+        <ul className="list">
           {upcoming.map((x, i) => (
             <li key={i}>
               {title(x)}
-              {isNew(x) && <span style={{
-                background: '#2b4c7e', borderRadius: 6, fontSize: 11,
-                padding: '1px 6px', marginLeft: 8,
-              }}>{t.neu}</span>}
+              {isNew(x) && <span className="badge">{t.neu}</span>}
               {x.status === 'blocked' && <em style={{ color: '#c98a3d' }}> — {t.waiting}</em>}
-              {x.due_at && <span style={{ color: '#9aa3b2' }}> · {x.due_at.slice(0, 10)}</span>}
+              {x.due_at && <div className="item__meta">{x.due_at.slice(0, 10)}</div>}
             </li>
           ))}
         </ul>
       </section>
 
       {visibleRequests.length > 0 && (
-        <section style={card}>
-          <h2 style={{ fontSize: 17 }}>{t.requests}</h2>
-          <ul>
+        <section className="card">
+          <h2>{t.requests}</h2>
+          <ul className="list">
             {visibleRequests.map((r) => (
               <li key={r.id}>
                 {r.title}
-                <span style={{ color: '#9aa3b2' }}> · {stateLabel[r.state] ?? r.state}</span>
-                {r.note && <div style={{ color: '#9aa3b2', fontSize: 13 }}>{r.note}</div>}
+                <div className="item__meta">
+                  {stateLabel[r.state] ?? r.state}
+                  {r.note && <> · {r.note}</>}
+                </div>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>{t.doneRecently}</h2>
+      <section className="card">
+        <h2>{t.doneRecently}</h2>
         {done.length === 0 && <p>—</p>}
-        <ul>
+        <ul className="list">
           {done.map((x, i) => (
-            <li key={i}>{title(x)} <span style={{ color: '#9aa3b2' }}>· {x.completed_at?.slice(0, 10)}</span></li>
+            <li key={i}>
+              {title(x)}
+              <div className="item__meta">{x.completed_at?.slice(0, 10)}</div>
+            </li>
           ))}
         </ul>
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>{t.reports}</h2>
+      <section className="card">
+        <h2>{t.reports}</h2>
         {(reports ?? []).length === 0 && <p>{t.noReports}</p>}
         {(reports ?? []).map((r) => (
           <details key={r.id} style={{ marginBottom: 8 }}>
-            <summary style={{ cursor: 'pointer' }}>
+            <summary style={{ cursor: 'pointer', minHeight: 36, display: 'flex', alignItems: 'center' }}>
               {r.kind === 'weekly' ? t.weekly : t.monthly} · {r.period_start} → {r.period_end}
             </summary>
-            <article style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, paddingTop: 8 }}>
-              {r.narrative_md}
-            </article>
+            <article className="prose" style={{ paddingTop: 8 }}>{r.narrative_md}</article>
           </details>
         ))}
       </section>

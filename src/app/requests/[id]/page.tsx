@@ -4,7 +4,7 @@
 
 import { estimateSuggestionFor, getRequest } from '@/requests/approve';
 import { approveRequestAction, declineRequestAction } from '../actions';
-import { buttonGreen, buttonSubtle, card, input, label, link, muted, Nav } from '../../ui';
+import { fmtDateTime, Nav } from '../../ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +19,7 @@ const PRIORITIES = [
 export default async function RequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const req = await getRequest(id);
-  if (!req) return <main style={{ padding: 24 }}>Request nahi mili.</main>;
+  if (!req) return <main className="container">Request nahi mili.</main>;
 
   const client = req.clients as unknown as { name: string; locale: string } | null;
   const draft = (req.draft ?? {}) as { title?: string; client_notes?: string };
@@ -29,28 +29,21 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
   const pending = req.state === 'pending_approval';
 
   return (
-    <main style={{ maxWidth: 760, margin: '0 auto', padding: 24 }}>
+    <main className="container container--narrow">
       <Nav />
-      <h1 style={{ fontSize: 20 }}>{client?.name} ki request</h1>
-      <p style={muted}>
-        {req.state} · {new Date(req.created_at).toLocaleString('en-GB')}
-      </p>
+      <h1>{client?.name} ki request</h1>
+      <p className="muted small">{req.state} · {fmtDateTime(req.created_at)}</p>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 16 }}>Client ne kya likha</h2>
-        <blockquote style={{
-          margin: 0, padding: '8px 12px', borderLeft: '3px solid #2a2f3a',
-          whiteSpace: 'pre-wrap', lineHeight: 1.6,
-        }}>
-          {req.raw_input}
-        </blockquote>
+      <section className="card">
+        <h2>Client ne kya likha</h2>
+        <blockquote className="quote">{req.raw_input}</blockquote>
 
         {transcript.length > 0 && (
           <>
-            <h3 style={{ fontSize: 14, marginBottom: 4 }}>Sawal-jawab</h3>
+            <h3>Sawal-jawab</h3>
             {transcript.map((t, i) => (
-              <div key={i} style={{ padding: '4px 0', fontSize: 14 }}>
-                <span style={muted}>{t.role === 'assistant' ? 'Sawal: ' : 'Client: '}</span>
+              <div key={i} className="small" style={{ padding: '4px 0' }}>
+                <span className="muted">{t.role === 'assistant' ? 'Sawal: ' : 'Client: '}</span>
                 {t.content}
               </div>
             ))}
@@ -59,100 +52,96 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
       </section>
 
       {req.state === 'approved' && req.created_task_id && (
-        <section style={card}>
-          Approve ho chuki — <a href={`/tasks/${req.created_task_id}`} style={link}>task dekhein</a>
-          {req.operator_note && <p style={muted}>Note: {req.operator_note}</p>}
+        <section className="card">
+          Approve ho chuki — <a href={`/tasks/${req.created_task_id}`}>task dekhein</a>
+          {req.operator_note && <p className="muted small">Note: {req.operator_note}</p>}
         </section>
       )}
 
       {req.state === 'rejected' && (
-        <section style={card}>
-          Decline ho chuki. Wajah: {req.operator_note}
-          <div style={{ ...muted, fontSize: 13 }}>
+        <section className="card">
+          <p>Decline ho chuki. Wajah: {req.operator_note}</p>
+          <p className="muted small">
             {req.operator_note_visible ? 'Ye wajah client ko dikh rahi hai.' : 'Ye wajah client ko nahi dikhti.'}
-          </div>
+          </p>
         </section>
       )}
 
       {pending && (
         <>
-          <section style={card}>
-            <h2 style={{ fontSize: 16 }}>Task banao</h2>
-            <form action={approveRequestAction} style={{ display: 'grid', gap: 10 }}>
+          <section className="card">
+            <h2>Task banao</h2>
+            <form action={approveRequestAction} className="stack">
               <input type="hidden" name="request_id" value={req.id} />
 
               <div>
-                <label style={label}>Internal title</label>
-                <input name="title" required defaultValue={suggestedTitle} style={input} />
+                <label className="label">Internal title</label>
+                <input name="title" required defaultValue={suggestedTitle} className="input" />
               </div>
 
               <div>
-                <label style={label}>Client-facing title (khali = wahi title)</label>
-                <input name="client_title" style={input} />
+                <label className="label">Client-facing title (khali = wahi title)</label>
+                <input name="client_title" className="input" />
               </div>
 
               <div>
-                <label style={label}>Description</label>
-                <textarea name="description" rows={3} defaultValue={draft.client_notes ?? ''} style={input} />
+                <label className="label">Description</label>
+                <textarea name="description" rows={3} defaultValue={draft.client_notes ?? ''} className="input" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <div className="grid grid--tight">
                 <div>
-                  <label style={label}>Priority — aap ka faisla</label>
-                  <select name="priority" required defaultValue="" style={input}>
+                  <label className="label">Priority — aap ka faisla</label>
+                  <select name="priority" required defaultValue="" className="input">
                     <option value="" disabled>Chunein…</option>
                     {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.text}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={label}>Estimate (min)</label>
+                  <label className="label">Estimate (min)</label>
                   <input name="est_minutes" type="number" min={5}
-                    defaultValue={suggestion?.minutes ?? 60} style={input} />
+                    defaultValue={suggestion?.minutes ?? 60} className="input" />
                   {suggestion && (
-                    <div style={{ ...muted, fontSize: 11 }}>
-                      {suggestion.minutes}m — {suggestion.basis}
-                    </div>
+                    <div className="muted tiny">{suggestion.minutes}m — {suggestion.basis}</div>
                   )}
                 </div>
                 <div>
-                  <label style={label}>Due</label>
-                  <input name="due_at" type="datetime-local" style={input} />
+                  <label className="label">Due</label>
+                  <input name="due_at" type="datetime-local" className="input" />
                 </div>
               </div>
 
-              <label style={{ fontSize: 13 }}>
+              <label className="check">
                 <input name="client_visible" type="checkbox" defaultChecked /> Client ke portal par dikhe
               </label>
 
               <div>
-                <label style={label}>Note (sirf aap ke liye)</label>
-                <input name="note" style={input} />
+                <label className="label">Note (sirf aap ke liye)</label>
+                <input name="note" className="input" />
               </div>
 
-              <div>
-                <button type="submit" style={buttonGreen}>Approve — task banao</button>
-              </div>
+              <div><button type="submit" className="btn btn--green">Approve — task banao</button></div>
             </form>
           </section>
 
-          <section style={card}>
-            <h2 style={{ fontSize: 16 }}>Ya decline karein</h2>
-            <form action={declineRequestAction} style={{ display: 'grid', gap: 8 }}>
+          <section className="card">
+            <h2>Ya decline karein</h2>
+            <form action={declineRequestAction} className="stack">
               <input type="hidden" name="request_id" value={req.id} />
               <div>
-                <label style={label}>Wajah (lazmi)</label>
-                <input name="note" required style={input} />
+                <label className="label">Wajah (lazmi)</label>
+                <input name="note" required className="input" />
               </div>
-              <label style={{ fontSize: 13 }}>
+              <label className="check">
                 <input name="show_to_client" type="checkbox" /> Ye wajah client ko dikhaein
               </label>
-              <div><button type="submit" style={buttonSubtle}>Decline</button></div>
+              <div><button type="submit" className="btn btn--subtle">Decline</button></div>
             </form>
           </section>
         </>
       )}
 
-      <p><a href="/requests" style={link}>← Requests</a></p>
+      <p><a href="/requests">← Requests</a></p>
     </main>
   );
 }

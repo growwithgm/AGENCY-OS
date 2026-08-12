@@ -1,7 +1,7 @@
 // Report drafts queue — the notification's landing page.
 
 import { db } from '@/lib/db';
-import { card, link, muted, Nav } from '../ui';
+import { Nav } from '../ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,38 +15,36 @@ export default async function ReportsPage() {
   const drafts = (reports ?? []).filter((r) => r.status === 'draft');
   const done = (reports ?? []).filter((r) => r.status !== 'draft');
 
-  const row = (r: (typeof reports extends (infer U)[] | null ? U : never)) => {
+  const row = (r: NonNullable<typeof reports>[number]) => {
     const c = r.clients as unknown as { name: string } | null;
     return (
       <li key={r.id}>
-        <a href={`/reports/${r.id}`} style={link}>
+        <a href={`/reports/${r.id}`}>
           {c?.name ?? '—'} — {r.kind} {r.period_start} → {r.period_end}
         </a>
-        <span style={muted}> · {r.status}</span>
+        <div className="item__meta">{r.status}</div>
       </li>
     );
   };
 
   return (
-    <main style={{ maxWidth: 760, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ fontSize: 22 }}>Reports</h1>
+    <main className="container container--narrow">
+      <h1>Reports</h1>
       <Nav />
 
-      <section style={{ ...card, ...(drafts.length ? { border: '1px solid #7a6a1e' } : {}) }}>
-        <h2 style={{ fontSize: 17 }}>Approve ka intezar ({drafts.length})</h2>
-        {drafts.length === 0 && <p style={muted}>Koi pending draft nahi.</p>}
-        <ul>{drafts.map(row)}</ul>
+      <section className={`card${drafts.length ? ' card--attention' : ''}`}>
+        <h2>Approve ka intezar ({drafts.length})</h2>
+        {drafts.length === 0 && <p className="muted">Koi pending draft nahi.</p>}
+        <ul className="list">{drafts.map(row)}</ul>
         {drafts.length > 0 && (
-          <p style={{ ...muted, fontSize: 13 }}>
-            Approve karne tak client ko kuch nahi dikhta.
-          </p>
+          <p className="muted small">Approve karne tak client ko kuch nahi dikhta.</p>
         )}
       </section>
 
-      <section style={card}>
-        <h2 style={{ fontSize: 17 }}>Bhej di gayi</h2>
-        {done.length === 0 && <p style={muted}>Abhi tak koi nahi.</p>}
-        <ul>{done.map(row)}</ul>
+      <section className="card">
+        <h2>Bhej di gayi</h2>
+        {done.length === 0 && <p className="muted">Abhi tak koi nahi.</p>}
+        <ul className="list">{done.map(row)}</ul>
       </section>
     </main>
   );
