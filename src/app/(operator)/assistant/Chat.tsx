@@ -367,10 +367,11 @@ function screenFor(tool: string, args: Record<string, unknown>): { href: string;
 type Commitment = { clientName: string | null; committedDate: string };
 
 function ProposalPanel({
-  proposal, commitment, onApplied,
+  proposal, commitment, clientColors, onApplied,
 }: {
   proposal: Proposal;
   commitment: Commitment | null;
+  clientColors: Record<string, number>;
   onApplied: (message: string) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -433,7 +434,10 @@ function ProposalPanel({
             <div className="card card--over">
               <p className="small">
                 This misses the <span className="num">{dayMonth(commitment.committedDate)}</span> date
-                you committed to {commitment.clientName ?? 'this client'}. Apply anyway?
+                you committed to{' '}
+                {commitment.clientName
+                  ? <ClientName name={commitment.clientName} colorIndex={clientColors[commitment.clientName] ?? null} />
+                  : 'this client'}. Apply anyway?
               </p>
               <div className="row" style={{ gap: 8, marginTop: 10 }}>
                 <button type="button" className="btn btn--danger btn--sm" onClick={apply} disabled={pending}>
@@ -465,8 +469,9 @@ function ProposalPanel({
       {!outcome && !applicable && (
         <div style={{ marginTop: 10 }}>
           <p className="small">
-            I have not built this one into the chat, so it is done on its own screen where the
-            full context is in front of you.
+            {isPriority || isDate
+              ? 'This came back without a value I can read, so it is safer to set it on the work item yourself.'
+              : 'I have not built this one into the chat, so it is done on its own screen where the full context is in front of you.'}
           </p>
           <a className="btn btn--sm" style={{ marginTop: 8 }} href={screenFor(proposal.tool, args).href}>
             {screenFor(proposal.tool, args).label}
@@ -551,6 +556,7 @@ function TurnView({ turn, onApplied }: { turn: TurnResult; onApplied: (message: 
           key={`proposal-${index}`}
           proposal={proposal}
           commitment={commitment}
+          clientColors={turn.clientColors}
           onApplied={onApplied}
         />
       ))}

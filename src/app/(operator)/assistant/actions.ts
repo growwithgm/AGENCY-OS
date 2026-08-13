@@ -20,6 +20,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireOperator } from '@/lib/auth';
 import { runAssistant, type AssistantTurn, type Step } from '@/assistant/run';
 import { runTool, type ToolContext } from '@/assistant/tools';
@@ -27,13 +28,12 @@ import type { Diff } from '@/assistant/diff';
 import type { ChatMessage } from '@/ai/runAI';
 import { getWork, updateWork, type UpdateWorkInput } from '@/data/work';
 import { logActivity } from '@/data/activity';
-import { listClients } from '@/data/clients';
+import { clientSummaries, listClients } from '@/data/clients';
 import { openSignals, refreshSignals } from '@/data/attention';
 import { PRIORITY_LABELS, type WorkMode } from '@/data/types';
 import { longDate } from '@/lib/format';
 import { plan, dayCapacities } from '@/engines/planner/plan';
 import { loadPlanInputs, todayView } from '@/data/planning';
-import { clientSummaries } from '@/data/clients';
 import { pendingRequests } from '@/data/requests';
 import { pendingUpdates } from '@/data/updates';
 import { askAdvice } from '@/ai/jobs/brief';
@@ -49,7 +49,7 @@ export type TurnResult = AssistantTurn & { clientColors: ClientColors };
 /** Long enough to hold a conversation, short enough to stay affordable. */
 const MAX_HISTORY = 40;
 
-async function clientColors(db: Parameters<typeof listClients>[0]): Promise<ClientColors> {
+async function clientColors(db: SupabaseClient): Promise<ClientColors> {
   const clients = await listClients(db);
   const colors: ClientColors = {};
   for (const client of clients) colors[client.name] = client.color_index ?? 0;
@@ -84,7 +84,12 @@ function revalidateWorkScreens(): void {
   revalidatePath('/activity');
 }
 
-function offlineTurn(answer: string, history: ChatMessage[]): TurnResult {
+/**
+ * A turn with nothing in it but a sentence. `degraded` is what switches the
+ * surface to buttons, so it is only ever true when the assistant genuinely
+ * could not be reached.
+ */
+function plainTurn(answer: string, history: ChatMessage[], degraded: boolean): TurnResult {
   return {
     answer,
     steps: [],
@@ -93,7 +98,7 @@ function offlineTurn(answer: string, history: ChatMessage[]): TurnResult {
     navigate: null,
     undo: [],
     transcript: history,
-    degraded: true,
+    degraded,
     clientColors: {},
   };
 }
@@ -113,7 +118,7 @@ export async function sendMessageAction(
   const history = trimHistory(input?.history);
 
   if (!message) {
-    return offlineTurn('Ask me something and I will answer with the figures.', history);
+    return plainTurn('Ask me something and I will answer with the figures.', history, false);
   }
 
   const ctx: ToolContext = { db: supabase, actor: session.email, now: new Date() };
@@ -122,9 +127,10 @@ export async function sendMessageAction(
   try {
     turn = await runAssistant(history, message, ctx);
   } catch {
-    return offlineTurn(
+    return plainTurn(
       'Something went wrong on my side and I stopped rather than guess. Nothing was changed.',
       history,
+      true,
     );
   }
 
