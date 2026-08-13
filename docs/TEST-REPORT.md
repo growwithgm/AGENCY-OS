@@ -286,3 +286,57 @@ There is no CRITICAL security or data-leak finding.
   ~5 "Rate limit test request N" entries.
 - The QA client login (`qa-ibban-portal@example.com`) was **removed** at the end of testing.
 - All parked test captures were **Discarded**.
+
+---
+
+# Fix verification — 2026-08-13
+
+All fixes are on branch `claude/agency-os-blueprint-vjt3uq`. After every fix
+`npx tsc --noEmit`, `npx vitest run` and `npm run build` were kept green;
+the suite grew from 200 to 240 tests. Schema changes were applied to a local
+Postgres 16 on both a fresh and an upgraded database.
+
+**A constraint on live verification, stated plainly.** The deployment
+`agency-os-rouge-six.vercel.app` is not reachable from the build environment
+— the network egress policy returns 403 for that host — so I could not drive
+the live deployment with a browser myself, nor take deployment screenshots.
+Anything needing an operator or client **session** on the deployment is
+marked "verify on deploy" below with the exact steps. What I could verify —
+tests, types, production build, local Postgres for SQL, and a real headless
+Chromium against a locally-served build for the pages that need no session —
+I did.
+
+The report ran against an **older deployment**: its assistant read "ADVISORY
+ONLY" and `/review` 404'd. The rebuild since then already carried a real
+assistant and the `/review` route, so several items were confirmed-correct
+rather than newly built.
+
+| # | Item | What was actually wrong | How verified |
+|---|---|---|---|
+| 1a | Assistant 500 | Stale build. Current submit path and page render already fall back rather than throw when the provider is unreachable. Hardened further: a tool that throws mid-turn now becomes a refusal instead of aborting the turn. | `src/assistant/resilience.test.ts` (3 tests) — degrades when unconfigured, a throwing tool → refusal, fenced tool still refused. **Verify on deploy:** a plain question returns facts+answer; "change the priority of X to critical" (and "just do it"/"you decide") returns a panel, never a silent change; a schedule change shows the 4-section diff → Apply → Undo toast; an empty message returns one line and no offline panel. |
+| 1b | `/review` 404 | Stale build — route exists now. The commitment tally was re-keyed on task id (title-matching could credit the wrong task) and every division on the page is guarded. | `src/data/review.test.ts` (8 tests), incl. shared-title and never-negative cases. **Verify on deploy:** `/review` renders with empty and with real data. |
+| 1c | Expired-session form crash | Middleware redirected server-action POSTs to an HTML login page, which the action-response parser cannot read. Those POSTs now pass through to the action, which re-checks the session and calls `redirect()` itself. | Build + reasoning about the Next server-action protocol. **Verify on deploy:** sign in as a client, clear cookies, submit the change-password form → lands on `/login`, no client-side exception. |
+| 2b | Capture mode always "operational" | Root cause found: the strict parse schema never listed `mode`/`client_title`/`confidence`, so the model was forbidden from returning a mode. All three added; mode constrained to the four values. | `src/ai/jobs/parseCapture.test.ts` (5 tests) guards the schema shape. **Verify on deploy:** "Design a logo" → creative; "send the monthly report" → analytical. |
+| 2a | Multi-task capture not split | Schema and UI already supported N cards; the prompt now carries two explicit two-client examples and a split-when-in-doubt rule. | Build. **Verify on deploy:** the two report sentences each yield two cards. |
+| 2c | Request flow English under Spanish portal | Static strings moved into the es/en dictionary; the page passes the client's locale. (AI-generated clarifying questions were already localised.) | Build + code. **Verify on deploy:** a Spanish client sees `/portal/request` in Spanish. |
+| 3a | "Nothing is saved" was false | Copy now reads "nothing becomes work until you add it"; the inbox says the same. | Local headless Chromium on the served build. |
+| 3b | Requests badge counted inbox items | Badge now counts only client requests; parked captures carry their own count on the capture button. | Code + build. **Verify on deploy:** park a capture with zero client requests → Requests badge stays empty, the + button shows a count. |
+| 3c | 5000-char inbox card | Preview text clamped to two lines; opening the capture shows all of it. | Code (`.clamp-2`) + build. |
+| 3d | Sub-44px tap targets | "Forgot password?" and the portal account/sign-out links are now 44px. | **Headless Chromium, measured:** forgot-password height = 44px; forgot-mode reachable; no horizontal overflow at 390px; 0 console errors. |
+| 4b | Overflow item labelled "Internal" | The client lookup was built only from work planned today; an overflowing item whose client had nothing scheduled fell to the no-client label. Now reads from every client. | Code + build. **Verify on deploy:** an over-capacity day shows the real client on "will not fit" items. |
+| 4c | Portal surface too cool | Portal ground token changed to warm sand (`#f4f0e6`). | Code + build. |
+| — | **Rate-limiter race** (found in the parallel audit, not the report) | The count-then-insert was non-atomic: a burst of parallel sign-in attempts all read the count before any insert landed, so all passed a limit of 10. Now one `rate_limit_hit` DB function under a per-key advisory lock. | **Local Postgres, 50 truly-concurrent calls at limit 10 → exactly 10 allowed, 40 blocked, 10 rows inserted.** Migration `0013`. |
+
+## Left for you to decide or run (deployment not reachable from here)
+
+- **4a — duplicate client.** `scripts/qa-diagnose-duplicates.sql` lists both
+  "Cosm(a/e)tics Afro Latino" rows with the amount of work, requests,
+  updates and logins attached to each. It changes nothing — you pick which
+  to keep; the merge/delete statements are included but commented.
+- **QA test data cleanup.** `scripts/qa-cleanup.sql` previews then removes
+  exactly the QA artefacts (the two ibBan test items, the injection and
+  clarifying requests, the "Rate limit test request" entries), scoped by
+  their test text so nothing real is touched.
+
+Both are seed-free runtime data on your Supabase, which this environment
+cannot reach — paste each into the Supabase SQL editor.

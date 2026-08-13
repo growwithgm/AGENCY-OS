@@ -622,6 +622,40 @@ create table if not exists rate_limit_events (
 create index if not exists rate_limit_events_lookup_idx
   on rate_limit_events (bucket, identity, created_at desc);
 
+-- Atomic fixed-window limiter. Count and insert happen together under a
+-- per-key advisory lock, so concurrent callers for the same key cannot all
+-- read the count before any of them writes — the race that would otherwise
+-- let a burst of parallel sign-in attempts sail past the limit. The lock is
+-- transaction-scoped (PostgREST runs each RPC in its own transaction) and
+-- keyed on the bucket+identity, so it never serialises unrelated callers.
+create or replace function rate_limit_hit(
+  p_bucket text, p_identity text, p_limit int, p_window_seconds int
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  since timestamptz := now() - make_interval(secs => p_window_seconds);
+  used  int;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_bucket || ':' || p_identity, 0));
+
+  select count(*) into used
+  from rate_limit_events
+  where bucket = p_bucket and identity = p_identity and created_at >= since;
+
+  if used >= p_limit then
+    return false;
+  end if;
+
+  insert into rate_limit_events (bucket, identity) values (p_bucket, p_identity);
+  return true;
+end;
+$$;
+
+revoke all on function rate_limit_hit(text, text, int, int) from public, anon, authenticated;
+
 -- ───────────────────────────────────────────────────────────────────
 -- 9. Row level security
 --
