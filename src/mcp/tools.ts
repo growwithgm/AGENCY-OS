@@ -19,6 +19,17 @@ import { pendingRequests } from '@/data/requests';
 import { saveDraft } from '@/data/capture';
 import { parseCapture } from '@/ai/jobs/parseCapture';
 import { hm } from '@/lib/format';
+import { runTool } from '@/assistant/tools';
+import { weeklyReview } from '@/data/review';
+import { listActivity } from '@/data/activity';
+
+/**
+ * MCP has no session — it is authenticated by a shared secret and acts as
+ * the operator. The service-role client is the legitimate caller here.
+ */
+function toolContext() {
+  return { db: supabaseAdmin(), actor: 'mcp', now: new Date() };
+}
 
 function text(value: unknown) {
   return {
@@ -182,4 +193,103 @@ export function registerTools(server: McpServer): void {
       note: 'Waiting in the Inbox. The operator confirms it, and chooses the priority.',
     };
   }));
+
+  /* ── Scheduling questions ─────────────────────────────────────────────
+   *
+   * The same deterministic answers the assistant gets, with the same
+   * limits: these read and simulate. Nothing here applies a plan, sets a
+   * priority or reaches a client.
+   */
+
+  server.registerTool('can_i_do_this_now', {
+    description:
+      'Whether a piece of work can be started right now, given the zone the clock is in '
+      + 'and the kinds of work that zone admits. Answers yes, no, or not-in-this-zone, '
+      + 'with the reason and the nearest alternative.',
+    inputSchema: {
+      work_id: z.string().describe('The work item id'),
+    },
+  }, async ({ work_id }) => guarded(async () => {
+    const result = await runTool('can_i_do_this_now', { work_id }, toolContext());
+    return result.ok ? result.data : { refused: result.refused, alternative: result.alternative };
+  }));
+
+  server.registerTool('when_can_i_do', {
+    description:
+      'The next three windows that could hold work of a given kind and length, respecting '
+      + 'zones, minimum unbroken blocks and what is already booked.',
+    inputSchema: {
+      mode: z.enum(['creative', 'technical', 'analytical', 'operational']),
+      minutes: z.number().int().positive(),
+    },
+  }, async ({ mode, minutes }) => guarded(async () => {
+    const result = await runTool('when_can_i_do', { mode, minutes }, toolContext());
+    return result.ok ? result.data : { refused: result.refused, alternative: result.alternative };
+  }));
+
+  server.registerTool('propose_placement', {
+    description:
+      'Simulate moving one work item to a day and return the full effect: what moves, what '
+      + 'else shifts because of it, capacity before and after, and any commitment it would '
+      + 'now miss. Nothing is applied — the operator applies it in the app.',
+    inputSchema: {
+      work_id: z.string(),
+      target_date: z.string().describe('YYYY-MM-DD'),
+    },
+  }, async ({ work_id, target_date }) => guarded(async () => {
+    const result = await runTool('propose_placement', { work_id, target_date }, toolContext());
+    return result.ok
+      ? { diff: result.diff, applied: false, note: 'Simulation only. Apply it in the app.' }
+      : { refused: result.refused, alternative: result.alternative };
+  }));
+
+  server.registerTool('propose_reshuffle', {
+    description:
+      'Simulate deferring named work out of the way and return the same structured effect. '
+      + 'Nothing is applied.',
+    inputSchema: {
+      work_ids: z.array(z.string()),
+      defer_days: z.number().int().positive().optional(),
+    },
+  }, async ({ work_ids, defer_days }) => guarded(async () => {
+    const result = await runTool('propose_reshuffle', { work_ids, defer_days: defer_days ?? 1 }, toolContext());
+    return result.ok
+      ? { diff: result.diff, applied: false, note: 'Simulation only. Apply it in the app.' }
+      : { refused: result.refused, alternative: result.alternative };
+  }));
+
+  server.registerTool('what_if', {
+    description:
+      'Simulate changing a work item\'s estimate or kind of work, and return what it would '
+      + 'do to the plan. Never applied.',
+    inputSchema: {
+      work_id: z.string(),
+      est_minutes: z.number().int().positive().optional(),
+      mode: z.enum(['creative', 'technical', 'analytical', 'operational']).optional(),
+    },
+  }, async ({ work_id, est_minutes, mode }) => guarded(async () => {
+    const result = await runTool('what_if', { work_id, est_minutes, mode }, toolContext());
+    return result.ok
+      ? { diff: result.diff, applied: false }
+      : { refused: result.refused, alternative: result.alternative };
+  }));
+
+  server.registerTool('get_weekly_review', {
+    description:
+      'The week in numbers: commitments met and missed, hours by kind of work and by client, '
+      + 'context switches per day, peak hours used against available, estimate accuracy and '
+      + 'the overrun factor per mode, why work ran over, and what keeps moving.',
+    inputSchema: {},
+  }, async () => guarded(async () => weeklyReview(supabaseAdmin())));
+
+  server.registerTool('list_activity', {
+    description:
+      'Recent operations on the system, newest first, including everything the assistant did '
+      + 'and what it changed.',
+    inputSchema: {
+      limit: z.number().int().positive().max(50).optional(),
+    },
+  }, async ({ limit }) => guarded(async () => ({
+    entries: await listActivity(supabaseAdmin(), { limit: limit ?? 20 }),
+  })));
 }
