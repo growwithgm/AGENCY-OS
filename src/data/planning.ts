@@ -9,7 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { plan, dayCapacities, ENGINE_VERSION } from '@/engines/planner/plan';
 import { plannedDays, slideUpdates } from '@/engines/planner/carryForward';
-import type { PlanResult, PlanTask } from '@/engines/planner/types';
+import type { DayZone, PlanResult, PlanTask, VisibilityState, WorkMode } from '@/engines/planner/types';
 import { recordAudit } from '@/lib/audit';
 import { dateKey } from '@/lib/format';
 
@@ -17,14 +17,16 @@ export const HORIZON_DAYS = 14;
 export const MIN_BLOCK_MINUTES = 30;
 
 export async function loadPlanInputs(db: SupabaseClient, now: Date) {
-  const [tasks, deps, rules, blackouts, fixed] = await Promise.all([
+  const [tasks, deps, rules, blackouts, fixed, zones, visibility] = await Promise.all([
     db.from('tasks')
-      .select('id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count')
+      .select('id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count, mode, safe_minutes, client_visible')
       .neq('status', 'done'),
     db.from('task_dependencies').select('task_id, depends_on'),
     db.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
     db.from('blackouts').select('starts_at, ends_at'),
     db.from('schedule_blocks').select('task_id, starts_at, ends_at').eq('is_locked', true),
+    db.from('day_zones').select('weekday, name, start_time, end_time, modes'),
+    db.from('client_visibility').select('client_id, target_days, last_visible_completion'),
   ]);
 
   const planTasks: PlanTask[] = (tasks.data ?? []).map((t) => ({
@@ -40,6 +42,18 @@ export async function loadPlanInputs(db: SupabaseClient, now: Date) {
     client_requested_date: t.client_requested_date,
     created_at: t.created_at,
     slid_count: t.slid_count ?? 0,
+    mode: (t.mode ?? 'operational') as WorkMode,
+    safe_minutes: t.safe_minutes,
+    client_visible: t.client_visible ?? true,
+  }));
+
+  // Times arrive as 'HH:MM:SS'; the engine reads 'HH:MM'.
+  const dayZones: DayZone[] = (zones.data ?? []).map((z) => ({
+    weekday: z.weekday,
+    name: z.name,
+    start_time: String(z.start_time).slice(0, 5),
+    end_time: String(z.end_time).slice(0, 5),
+    modes: z.modes as WorkMode[],
   }));
 
   return {
@@ -51,6 +65,8 @@ export async function loadPlanInputs(db: SupabaseClient, now: Date) {
     capacityRules: rules.data ?? [],
     blackouts: blackouts.data ?? [],
     fixedBlocks: fixed.data ?? [],
+    zones: dayZones,
+    visibility: (visibility.data ?? []) as VisibilityState[],
   };
 }
 
@@ -85,6 +101,7 @@ export async function replan(db: SupabaseClient, now = new Date()): Promise<Plan
       starts_at: b.starts_at.toISOString(),
       ends_at: b.ends_at.toISOString(),
       is_locked: false,
+      zone: b.zone ?? null,
       plan_run_id: run?.id ?? null,
     })));
   }

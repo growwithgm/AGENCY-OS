@@ -21,13 +21,23 @@ function dateRank(value: string | null): number {
   return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
 }
 
-export function compareWork(a: PlanTask, b: PlanTask): number {
+export function compareWork(a: PlanTask, b: PlanTask, boosts?: Map<string, number>): number {
   if (a.priority !== b.priority) return a.priority - b.priority;
 
   const committed = dateRank(a.committed_date) - dateRank(b.committed_date);
   if (committed !== 0 && Number.isFinite(committed)) return committed;
   if (dateRank(a.committed_date) !== dateRank(b.committed_date)) {
     return dateRank(a.committed_date) === Number.POSITIVE_INFINITY ? 1 : -1;
+  }
+
+  // Rotation: among work equal on priority and commitment, a starved
+  // client's visible work goes first. Never above either — a fairness
+  // nudge is not allowed to outrank a promise or the operator's word.
+  if (boosts) {
+    const boostOf = (t: PlanTask) =>
+      t.client_visible !== false ? (boosts.get(t.client_id) ?? 0) : 0;
+    const boost = boostOf(b) - boostOf(a);
+    if (boost !== 0) return boost;
   }
 
   const target = dateRank(a.internal_target) - dateRank(b.internal_target);
@@ -42,8 +52,8 @@ export function compareWork(a: PlanTask, b: PlanTask): number {
   return a.id.localeCompare(b.id);
 }
 
-export function orderWork(tasks: PlanTask[]): PlanTask[] {
-  return [...tasks].sort(compareWork);
+export function orderWork(tasks: PlanTask[], boosts?: Map<string, number>): PlanTask[] {
+  return [...tasks].sort((a, b) => compareWork(a, b, boosts));
 }
 
 /**

@@ -7,6 +7,45 @@ export type WorkStatus =
 /** Work states that cannot be planned: the operator is not the blocker. */
 export const UNPLANNABLE: WorkStatus[] = ['blocked', 'waiting_on_client', 'done'];
 
+/** The four kinds of hour a day is made of. */
+export type WorkMode = 'creative' | 'technical' | 'analytical' | 'operational';
+
+export const MODES: WorkMode[] = ['creative', 'technical', 'analytical', 'operational'];
+
+/**
+ * Minimum unbroken block per mode. Deep modes refuse fragments outright;
+ * a 20-minute sliver of creative work is a lie about what creative work is.
+ */
+export const MODE_MIN_MINUTES: Record<WorkMode, number> = {
+  creative: 90,
+  technical: 90,
+  analytical: 45,
+  operational: 15,
+};
+
+/** Deep modes are placed whole in one zone — never split across days. */
+export const DEEP_MODES: WorkMode[] = ['creative', 'technical'];
+
+/**
+ * A named window in the day permitting certain modes. end_time before
+ * start_time means the zone crosses midnight; it still belongs to the
+ * starting day's plan.
+ */
+export type DayZone = {
+  weekday: number;      // 0 = Sunday
+  name: string;
+  start_time: string;   // 'HH:MM'
+  end_time: string;
+  modes: WorkMode[];
+};
+
+/** Rotation state per client, feeding the visibility boost. */
+export type VisibilityState = {
+  client_id: string;
+  target_days: number;
+  last_visible_completion: string | null;  // ISO timestamp
+};
+
 export type PlanTask = {
   id: string;
   client_id: string;
@@ -25,6 +64,12 @@ export type PlanTask = {
   client_requested_date: string | null;
   created_at: string;
   slid_count: number;
+  /** The kind of hour this work consumes. */
+  mode?: WorkMode;
+  /** Commitment-grade estimate (likely × overrun factor). Feasibility only. */
+  safe_minutes?: number | null;
+  /** Whether the client can see it — the rotation boost applies only here. */
+  client_visible?: boolean;
 };
 
 export type CapacityRule = {
@@ -54,19 +99,30 @@ export type PlanInput = {
   blackouts: Blackout[];
   /** Commitments and locked blocks: reserved before anything else is placed. */
   fixedBlocks: FixedBlock[];
+  /** Zones. When present the zoned engine runs; absent, the legacy path. */
+  zones?: DayZone[];
+  /** Rotation state per client — see visibilityBoost(). */
+  visibility?: VisibilityState[];
 };
 
 export type PlannedBlock = {
   task_id: string;
   starts_at: Date;
   ends_at: Date;
+  /** Zoned engine provenance. */
+  zone?: string;
+  mode?: WorkMode;
 };
 
 export type AtRiskItem = {
   task: PlanTask;
   /** Which date it cannot be met against, and why. */
   relevant_date: string | null;
-  reason: 'no_capacity_before_date' | 'no_capacity_in_horizon' | 'dependency_at_risk' | 'dependency_cycle';
+  reason:
+    | 'no_capacity_before_date' | 'no_capacity_in_horizon'
+    | 'dependency_at_risk' | 'dependency_cycle'
+    | 'no_zone_accepts_mode' | 'no_block_large_enough'
+    | 'commitment_needs_buffer';
   minutes_unplaced: number;
 };
 
@@ -74,6 +130,8 @@ export type PlanResult = {
   blocks: PlannedBlock[];
   atRisk: AtRiskItem[];
   cycles: string[][];
+  /** Context changes per day — the cost of a scattered plan, made visible. */
+  modeSwitches: Record<string, number>;
   /** Provenance: recorded so "why was this Thursday?" stays answerable. */
   engineVersion: string;
   inputHash: string;
