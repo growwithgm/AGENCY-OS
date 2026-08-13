@@ -3,22 +3,29 @@
 import { usePathname } from 'next/navigation';
 
 /**
- * Bottom tabs on mobile, sidebar on desktop — the same four destinations.
- * Desktop adds width, not features.
+ * The prototype's nine destinations: a 214px sidebar on desktop, bottom
+ * tabs on mobile. The one red badge is work waiting on a decision.
  */
-const TABS = [
-  { href: '/', label: 'Today' },
-  { href: '/inbox', label: 'Inbox' },
-  { href: '/clients', label: 'Clients' },
-  { href: '/assistant', label: 'Assistant' },
+const NAV = [
+  { href: '/', label: 'Today', icon: '◧', short: 'Today' },
+  { href: '/work', label: 'Work', icon: '☰', short: 'Work' },
+  { href: '/requests', label: 'Requests', icon: '↘', short: 'Reqs', badged: true },
+  { href: '/clients', label: 'Clients', icon: '◎', short: 'Clients' },
+  { href: '/updates', label: 'Updates', icon: '✎', short: 'Updates' },
+  { href: '/review', label: 'Review', icon: '◱', short: 'Review' },
+  { href: '/activity', label: 'Activity', icon: '⟲', short: 'Log' },
+  { href: '/assistant', label: 'Assistant', icon: '✦', short: 'Ask' },
+  { href: '/settings', label: 'Settings', icon: '⚙', short: 'Settings' },
 ];
 
-const SIDEBAR_EXTRA = [
-  { href: '/week', label: 'The week' },
-  { href: '/availability', label: 'Availability' },
-];
+/** Mobile keeps the five most-travelled destinations; the rest live in Settings. */
+const MOBILE = ['/', '/work', '/requests', '/clients', '/assistant'];
 
-export function Nav({ inboxCount }: { inboxCount: number }) {
+export function Nav({ badgeCount, operatorEmail, dateShort }: {
+  badgeCount: number;
+  operatorEmail: string;
+  dateShort: string;
+}) {
   const pathname = usePathname();
   const isCurrent = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -26,24 +33,35 @@ export function Nav({ inboxCount }: { inboxCount: number }) {
   return (
     <>
       <nav className="sidebar" aria-label="Sections">
-        <div style={{ fontWeight: 600, padding: '0 12px 18px' }}>Ledger</div>
-        {[TABS[0], SIDEBAR_EXTRA[0], TABS[1], TABS[2], TABS[3], SIDEBAR_EXTRA[1]].map((tab) => (
-          <a key={tab.href} href={tab.href} aria-current={isCurrent(tab.href) ? 'page' : undefined}>
-            <span>{tab.label}</span>
-            {tab.href === '/inbox' && inboxCount > 0 && (
-              <span className="tabbar__badge">{inboxCount}</span>
-            )}
+        <div className="sidebar__brand">
+          <span className="brand-mark">A</span>
+          Agency OS
+        </div>
+        {NAV.map((item) => (
+          <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+            <span><span className="nav-ico">{item.icon}</span>{item.label}</span>
+            {item.badged && badgeCount > 0 && <span className="nav-badge">{badgeCount}</span>}
           </a>
         ))}
+        <div className="sidebar__foot">
+          <div>Signed in as</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{operatorEmail}</div>
+          <a href="/signout" style={{ fontSize: 11.5 }}>Sign out</a>
+        </div>
       </nav>
 
+      <div className="mobile-topbar">
+        <span className="brand-mark" style={{ width: 18, height: 18, fontSize: 10 }}>A</span>
+        Agency OS
+        <span className="num">{dateShort}</span>
+      </div>
+
       <nav className="tabbar" aria-label="Sections">
-        {TABS.map((tab) => (
-          <a key={tab.href} href={tab.href} aria-current={isCurrent(tab.href) ? 'page' : undefined}>
-            <span>{tab.label}</span>
-            {tab.href === '/inbox' && inboxCount > 0 && (
-              <span className="tabbar__badge">{inboxCount}</span>
-            )}
+        {NAV.filter((item) => MOBILE.includes(item.href)).map((item) => (
+          <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+            <span className="nav-ico">{item.icon}</span>
+            <span>{item.short}</span>
+            {item.badged && badgeCount > 0 && <span className="tabbar__badge">{badgeCount}</span>}
           </a>
         ))}
       </nav>

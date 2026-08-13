@@ -1,18 +1,38 @@
-/** Display helpers. Times are always rendered in the mono `.num` class. */
+/**
+ * Display helpers. Times are always rendered in the mono `.num` class.
+ *
+ * Duration format everywhere: `1h 30m` — never `1.5h`, never `90 min`.
+ * Empty is `—`, never `0h 0m`. Deltas are signed with a real minus sign.
+ */
 
 export function hm(minutes: number): string {
-  const sign = minutes < 0 ? '-' : '';
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h && m) return `${sign}${h}h ${String(m).padStart(2, '0')}m`;
-  if (h) return `${sign}${h}h`;
-  return `${sign}${m}m`;
+  const m0 = Math.round(minutes || 0);
+  if (m0 <= 0) return '—';
+  const h = Math.floor(m0 / 60);
+  const m = m0 % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+/** For a delta: `+1h 30m` / `−45m` / `—` when nothing changed. */
+export function hmSigned(minutes: number): string {
+  const m0 = Math.round(minutes || 0);
+  if (m0 === 0) return '—';
+  return `${m0 > 0 ? '+' : '−'}${hm(Math.abs(m0))}`;
+}
+
+/** For a percentage delta: `+60%` / `−12%`. */
+export function pctSigned(ratio: number): string {
+  const pct = Math.round(ratio * 100);
+  if (pct === 0) return '—';
+  return `${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`;
 }
 
 /** Compact form for a chip: 45m, 2h, 2h30. */
 export function hmShort(minutes: number): string {
   const abs = Math.abs(Math.round(minutes));
+  if (abs === 0) return '—';
   const h = Math.floor(abs / 60);
   const m = abs % 60;
   if (h && m) return `${h}h${String(m).padStart(2, '0')}`;

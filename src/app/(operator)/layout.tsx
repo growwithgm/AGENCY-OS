@@ -11,20 +11,24 @@ export const dynamic = 'force-dynamic';
  * first gate, never the only one (INV-9).
  */
 export default async function OperatorLayout({ children }: { children: ReactNode }) {
-  const { supabase } = await requireOperator();
+  const { session, supabase } = await requireOperator();
 
-  // The inbox badge is the one number carried across every screen: unseen
-  // work waiting on a decision.
+  // The one badge carried across every screen: things waiting on a decision.
   const [drafts, requests] = await Promise.all([
     openDrafts(supabase),
     pendingRequests(supabase),
   ]);
-  const inboxCount = drafts.length + requests.length;
+  const badgeCount = drafts.length + requests.length;
+
+  const dateShort = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
   return (
     <div className="app">
-      <Nav inboxCount={inboxCount} />
-      {children}
+      <Nav badgeCount={badgeCount} operatorEmail={session.email} dateShort={dateShort} />
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        {children}
+        <a className="fab" href="/capture" aria-label="Capture work">+</a>
+      </div>
     </div>
   );
 }
