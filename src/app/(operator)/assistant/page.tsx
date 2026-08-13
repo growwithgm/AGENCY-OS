@@ -71,7 +71,7 @@ export default async function AssistantPage() {
 
       <section className="card">
         <div className="spread" style={{ marginBottom: 8 }}>
-          <span className="work__client">Today&rsquo;s brief</span>
+          <span className="eyebrow">Today&rsquo;s brief</span>
           {brief.source === 'fallback' && <span className="tag tag--info">written without AI</span>}
         </div>
         <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{brief.text}</p>

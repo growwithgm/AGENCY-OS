@@ -93,7 +93,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 function Value({ name, value }: { name: string; value: unknown }) {
   if (isDateKey(name, value)) return <span className="num">{shortDate(value as string)}</span>;
-  if (name.endsWith('minutes') && num(value) !== null) {
+  if ((name.endsWith('minutes') || name.startsWith('minutes')) && num(value) !== null) {
     return <span className="num">{hm(value as number)}</span>;
   }
   if (typeof value === 'boolean') return <span>{value ? 'yes' : 'no'}</span>;
@@ -261,7 +261,7 @@ function ActivityFacts({ data }: { data: unknown }) {
         <div key={str(entry.id) ?? index} className="rows__row">
           <span className="small">{humanKey(str(entry.action) ?? 'change')}</span>
           <span className="tiny dim">
-            {str(entry.actor)} · {relativePhrase((str(entry.created_at) ?? '').slice(0, 10))}
+            {str(entry.actor)} · {relativePhrase(str(entry.created_at)?.slice(0, 10) ?? null)}
           </span>
         </div>
       ))}
@@ -522,13 +522,7 @@ function suggestions(turn: TurnResult): { href: string; label: string }[] {
 
 /* ── one turn ─────────────────────────────────────────────────────────── */
 
-function TurnView({
-  turn, clientColors, onApplied,
-}: {
-  turn: TurnResult;
-  clientColors: Record<string, number>;
-  onApplied: (message: string) => void;
-}) {
+function TurnView({ turn, onApplied }: { turn: TurnResult; onApplied: (message: string) => void }) {
   // The second confirmation only appears when the engine actually found a
   // commitment this would miss — never because the prose mentioned one.
   const commitments = turn.diffs.flatMap((diff) => diff.commitments);
@@ -549,7 +543,7 @@ function TurnView({
       )}
 
       {turn.diffs.map((diff, index) => (
-        <DiffPanel key={`diff-${index}`} diff={diff} clientColors={clientColors} />
+        <DiffPanel key={`diff-${index}`} diff={diff} clientColors={turn.clientColors} />
       ))}
 
       {turn.proposals.map((proposal, index) => (
@@ -580,7 +574,7 @@ function TurnView({
 const MODES: WorkMode[] = ['creative', 'technical', 'analytical', 'operational'];
 const LENGTHS = [30, 60, 120, 240];
 
-function OfflinePanel({ running, clientColors }: { running: RunningItem | null; clientColors: Record<string, number> }) {
+function OfflinePanel({ running }: { running: RunningItem | null }) {
   const [result, setResult] = useState<ReadOnlyResult | null>(null);
   const [pending, setPending] = useState(false);
   const [mode, setMode] = useState<WorkMode>('creative');
@@ -659,7 +653,7 @@ function OfflinePanel({ running, clientColors }: { running: RunningItem | null; 
         <>
           <Facts steps={result.steps} />
           {result.diffs.map((diff, index) => (
-            <DiffPanel key={`offline-diff-${index}`} diff={diff} clientColors={clientColors} />
+            <DiffPanel key={`offline-diff-${index}`} diff={diff} clientColors={result.clientColors} />
           ))}
         </>
       )}
@@ -756,7 +750,6 @@ export function Chat({
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [clientColors, setClientColors] = useState<Record<string, number>>({});
   const [text, setText] = useState('');
   const [pending, setPending] = useState(false);
   const [degraded, setDegraded] = useState(offline);
@@ -794,7 +787,6 @@ export function Chat({
     try {
       const turn = await sendMessageAction({ history, message: trimmed });
       setHistory(turn.transcript);
-      setClientColors(turn.clientColors);
       setEntries((prev) => [...prev, { id: nextId.current++, kind: 'assistant', turn }]);
       if (turn.degraded) setDegraded(true);
       if (turn.undo.length > 0) {
@@ -821,10 +813,28 @@ export function Chat({
     }
   };
 
+  const conversation = entries.map((entry) => {
+    if (entry.kind === 'operator') {
+      return (
+        <div key={entry.id}>
+          <div className="eyebrow">You asked</div>
+          <p style={{ marginTop: 4 }}>{entry.text}</p>
+        </div>
+      );
+    }
+    if (entry.kind === 'note') {
+      return <p key={entry.id} className="small dim">{entry.text}</p>;
+    }
+    return <TurnView key={entry.id} turn={entry.turn} onApplied={addNote} />;
+  });
+
+  // Anything already said stays on screen when the assistant goes offline
+  // mid-conversation: the last answer is usually the explanation of why.
   if (degraded) {
     return (
       <div className="stack">
-        <OfflinePanel running={running} clientColors={clientColors} />
+        {conversation.length > 0 && <div className="stack">{conversation}</div>}
+        <OfflinePanel running={running} />
       </div>
     );
   }
@@ -851,27 +861,7 @@ export function Chat({
           </div>
         )}
 
-        {entries.map((entry) => {
-          if (entry.kind === 'operator') {
-            return (
-              <div key={entry.id}>
-                <div className="eyebrow">You asked</div>
-                <p style={{ marginTop: 4 }}>{entry.text}</p>
-              </div>
-            );
-          }
-          if (entry.kind === 'note') {
-            return <p key={entry.id} className="small dim">{entry.text}</p>;
-          }
-          return (
-            <TurnView
-              key={entry.id}
-              turn={entry.turn}
-              clientColors={clientColors}
-              onApplied={addNote}
-            />
-          );
-        })}
+        {conversation}
 
         {pending && <p className="small dim">Working it out…</p>}
         <div ref={bottom} />
