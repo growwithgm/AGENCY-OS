@@ -34,7 +34,18 @@ Rules:
   ("Meta creative", "Search terms", "Landing page copy"), or null.
 - A relative date ("before friday", "next week") becomes internal_target in
   YYYY-MM-DD using the supplied today's date. A stated date is a target,
-  never a commitment.`;
+  never a commitment.
+- mode is the kind of hour the work consumes, one of: creative (design,
+  copy, concepting), technical (build, code, configuration), analytical
+  (research, reporting, audit) or operational (admin, scheduling, replies,
+  short errands). Judge it from the work itself. Default to operational
+  only when nothing suggests otherwise.
+- client_title is how this work should be named to the client: the same
+  job with the internal shorthand removed and no internal jargon. If the
+  title is already fine for a client to read, repeat it.
+- confidence is your own judgement of each field, 0 to 1. Be honest — a
+  low number tells the operator to look, which is more useful than false
+  certainty.`;
 
 export const CLARIFY_CAPTURE_SYSTEM = `You ask an agency operator ONE short question about a work item he is
 capturing, so the system can finish structuring it.

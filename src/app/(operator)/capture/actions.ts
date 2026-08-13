@@ -56,13 +56,23 @@ export async function parseCaptureAction(
   };
 }
 
-/** Answer one chip question — client, estimate or priority — for one item. */
-export async function answerDraftFieldAction(form: FormData): Promise<void> {
+/**
+ * Save one answer against one item.
+ *
+ * Each answer is written as it is given rather than at the end, so a lost
+ * connection costs the last tap and not the whole draft.
+ */
+export async function saveItemAction(form: FormData): Promise<void> {
   const { supabase } = await requireOperator();
   const draftId = String(form.get('draft_id') ?? '');
   const index = Number(form.get('index') ?? 0);
-  const field = String(form.get('field') ?? '');
-  const value = String(form.get('value') ?? '');
+
+  let changes: Partial<DraftItem>;
+  try {
+    changes = JSON.parse(String(form.get('changes') ?? '{}')) as Partial<DraftItem>;
+  } catch {
+    throw new Error('could not read the change');
+  }
 
   const draft = await getDraft(supabase, draftId);
   if (!draft) throw new Error('draft not found');
@@ -71,11 +81,17 @@ export async function answerDraftFieldAction(form: FormData): Promise<void> {
   const item = items[index];
   if (!item) throw new Error('item not found');
 
-  if (field === 'client') item.clientId = value || null;
-  if (field === 'estimate') item.estMinutes = Number(value) || null;
-  if (field === 'priority') item.priority = Number(value) || null;
-  if (field === 'target') item.internalTarget = value || null;
+  // Only fields the review screen owns. Anything else is ignored rather
+  // than trusted, because this arrives as JSON from the browser.
+  const allowed: (keyof DraftItem)[] = [
+    'clientId', 'isInternal', 'estMinutes', 'priority',
+    'mode', 'clientTitle', 'clientVisible', 'internalTarget', 'title',
+  ];
+  for (const key of allowed) {
+    if (key in changes) (item as Record<string, unknown>)[key] = changes[key];
+  }
 
+  items[index] = item;
   await updateDraftItems(supabase, draftId, items, draft.missing_fields);
   revalidatePath('/capture');
   revalidatePath('/inbox');

@@ -1,20 +1,24 @@
 /**
  * Today — the home screen, and the argument of the product.
  *
- * Capacity first, in one honest measure. Then the plan in order. When the
- * day is over capacity the list splits into what will fit and what will
- * not, because that is a decision to make rather than a warning to read.
+ * Capacity first, in one honest measure. Then the shape of the day, then
+ * what is running, then what needs attention, then the plan in order.
+ * When the day is over capacity the list splits into what will fit and
+ * what will not, because that is a decision to make rather than a warning
+ * to read.
  */
 
 import { requireOperator } from '@/lib/auth';
 import { plan } from '@/engines/planner/plan';
 import { loadPlanInputs, todayView } from '@/data/planning';
 import { openSignals } from '@/data/attention';
-import { hm, longDate, todayKey } from '@/lib/format';
+import { dayShape } from '@/data/zones';
+import { hm, longDate, shortDate } from '@/lib/format';
 import { Capacity } from './Capacity';
+import { DayShape } from './DayShape';
+import { RunningNow } from './RunningNow';
 import { Flags } from './Flags';
 import { WorkRow, type WorkRowData } from './WorkRow';
-import { replanAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,10 +26,11 @@ export default async function TodayPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, planInput] = await Promise.all([
+  const [view, signals, planInput, shape] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     loadPlanInputs(supabase, now),
+    dayShape(supabase, now),
   ]);
 
   // At-risk is recomputed from the same engine the plan came from, so the
@@ -39,56 +44,74 @@ export default async function TodayPage() {
       id: item.task.id,
       title: item.task.title,
       clientName: item.clientName,
+      colorIndex: item.clientColorIndex,
       status: item.task.status,
       priority: item.task.priority,
+      mode: item.task.mode ?? 'operational',
       minutes: item.minutes,
       estMinutes: item.task.est_minutes,
       actualMinutes: item.task.actual_minutes,
       committedDate: item.task.committed_date,
       internalTarget: item.task.internal_target,
-      workType: null,
       slidCount: item.task.slid_count,
       atRisk: Boolean(risk),
-      riskNote: risk
-        ? risk.minutes_unplaced > 0
-          ? `${hm(risk.minutes_unplaced)} of this has nowhere to go before ${risk.relevant_date ?? 'the end of the horizon'}.`
-          : `This lands after ${risk.relevant_date}.`
-        : null,
+      riskNote: risk ? riskSentence(risk) : null,
     };
   });
 
-  // Work due today or already committed that the plan could not place at
-  // all: the honest "will not fit" group.
+  // Work the plan could not place anywhere: the honest "will not fit" group.
   const unplaced = planResult.atRisk
     .filter((r) => r.minutes_unplaced > 0)
     .filter((r) => !view.items.some((i) => i.task.id === r.task.id));
 
-  const over = view.plannedMinutes > view.availableMinutes;
+  const overflowMinutes = unplaced.reduce((total, r) => total + r.minutes_unplaced, 0);
+  const over = overflowMinutes > 0;
+
+  const running = view.items.find((i) => i.task.status === 'in_progress');
+
+  const clientNames = new Map(view.items.map((i) => [i.task.client_id, i.clientName]));
 
   return (
     <main className="screen">
-      <div className="head-row">
-        <div>
-          <div className="eyebrow">{longDate(view.date)}</div>
-          <h1 className="page-title">Today</h1>
-        </div>
-        <a href="/capture" className="btn btn--sm" aria-label="Capture new work">+ Capture</a>
-      </div>
-
       <Capacity
+        dateLabel={longDate(view.date)}
         plannedMinutes={view.plannedMinutes}
         availableMinutes={view.availableMinutes}
+        overflowMinutes={overflowMinutes}
         itemCount={items.length}
-        willNotFitCount={unplaced.length}
+        tomorrow={{
+          label: shortDate(view.tomorrow.date),
+          availableMinutes: view.tomorrow.availableMinutes,
+          plannedMinutes: view.tomorrow.plannedMinutes,
+          overflowMinutes: 0,
+        }}
       >
         {over && (
           <>
-            <a href="/week" className="btn btn--sm">Move work</a>
-            <a href="/inbox" className="btn btn--sm">Cut scope</a>
+            <a href="/work" className="btn btn--sm">Move something</a>
             <a href="/assistant" className="btn btn--sm">Ask what to cut</a>
           </>
         )}
       </Capacity>
+
+      {running && (
+        <div style={{ marginTop: 16 }}>
+          <RunningNow
+            item={{
+              id: running.task.id,
+              title: running.task.title,
+              clientName: running.clientName,
+              colorIndex: running.clientColorIndex,
+              estMinutes: running.task.est_minutes,
+              actualMinutes: running.task.actual_minutes,
+            }}
+          />
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <DayShape zones={shape.zones} modeSwitches={shape.modeSwitches} />
+      </div>
 
       <Flags signals={signals} />
 
@@ -101,7 +124,8 @@ export default async function TodayPage() {
         <div className="card">
           <p className="muted">Nothing is planned for today.</p>
           <p className="tiny dim" style={{ marginTop: 6 }}>
-            Either the day has no working hours set, or there is no open work to place.
+            Either today has no zones set, or there is no open work to place. Both are
+            fixable: zones live in Settings, work starts at Capture.
           </p>
         </div>
       )}
@@ -110,9 +134,9 @@ export default async function TodayPage() {
 
       {unplaced.length > 0 && (
         <>
-          <div className="section-label" style={{ color: 'var(--risk)' }}>
+          <div className="section-label" style={{ color: 'var(--red)' }}>
             <span>Will not fit</span>
-            <span className="num">{hm(unplaced.reduce((t, r) => t + r.minutes_unplaced, 0))}</span>
+            <span className="num">{hm(overflowMinutes)}</span>
           </div>
 
           {unplaced.map((risk) => (
@@ -121,31 +145,47 @@ export default async function TodayPage() {
               item={{
                 id: risk.task.id,
                 title: risk.task.title,
-                clientName: null,
+                clientName: clientNames.get(risk.task.client_id) ?? null,
+                colorIndex: null,
                 status: risk.task.status,
                 priority: risk.task.priority,
+                mode: risk.task.mode ?? 'operational',
                 minutes: risk.minutes_unplaced,
                 estMinutes: risk.task.est_minutes,
                 actualMinutes: risk.task.actual_minutes,
                 committedDate: risk.task.committed_date,
                 internalTarget: risk.task.internal_target,
-                workType: null,
                 slidCount: risk.task.slid_count,
                 atRisk: true,
-                riskNote: risk.relevant_date
-                  ? `${hm(risk.minutes_unplaced)} cannot be placed before ${risk.relevant_date}.`
-                  : `${hm(risk.minutes_unplaced)} does not fit inside the planning horizon.`,
+                riskNote: riskSentence(risk),
               }}
             />
           ))}
         </>
       )}
-
-      <form action={replanAction} style={{ marginTop: 24 }}>
-        <button type="submit" className="btn btn--sm btn--quiet">Recalculate plan</button>
-      </form>
-
-      <a href="/capture" className="fab" aria-label="Capture new work">+</a>
     </main>
   );
+}
+
+/** Say which wall the work hit, in words rather than a code. */
+function riskSentence(risk: { reason: string; minutes_unplaced: number; relevant_date: string | null }): string {
+  const amount = hm(risk.minutes_unplaced);
+  switch (risk.reason) {
+    case 'no_zone_accepts_mode':
+      return 'No zone in the next two weeks admits this kind of work. Change its mode, or add a zone that does.';
+    case 'no_block_large_enough':
+      return `This needs one unbroken run and no zone has that much left. ${amount} is unplaced.`;
+    case 'commitment_needs_buffer':
+      return `This fits only if nothing goes wrong. The safe estimate does not fit before ${risk.relevant_date}.`;
+    case 'dependency_at_risk':
+      return 'Something this depends on has nowhere to go, so this cannot be placed either.';
+    case 'dependency_cycle':
+      return 'This is in a dependency loop. Break the loop and it can be planned.';
+    case 'no_capacity_before_date':
+      return risk.minutes_unplaced > 0
+        ? `${amount} of this has nowhere to go before ${risk.relevant_date}.`
+        : `This lands after ${risk.relevant_date}.`;
+    default:
+      return `${amount} does not fit inside the next two weeks.`;
+  }
 }

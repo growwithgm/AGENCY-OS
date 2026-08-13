@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createWork } from './work';
+import type { WorkMode } from './types';
 
 export type DraftItem = {
   title: string;
@@ -19,6 +20,16 @@ export type DraftItem = {
   internalTarget: string | null;
   workType: string | null;
   detail: string | null;
+  /** The kind of hour this consumes — the scheduler places by it. */
+  mode: WorkMode | null;
+  /** How this reads in the client's portal. Falls back to the title. */
+  clientTitle: string | null;
+  /** Whether the client sees it at all. */
+  clientVisible: boolean;
+  /** Explicitly the operator's own work: no client, never visible. */
+  isInternal: boolean;
+  /** The parser's own honesty about each field, 0-1. Below 0.7 is flagged. */
+  confidence: number | null;
   /** Set when the parser matched an existing item, so we link not duplicate. */
   duplicateOfId?: string | null;
 };
@@ -85,17 +96,24 @@ export async function confirmDraft(db: SupabaseClient, id: string): Promise<stri
   const created: string[] = [];
   for (const item of draft.items) {
     if (item.duplicateOfId) continue;             // linked, not duplicated
-    if (!item.clientId || !item.priority) {
-      throw new Error('every item needs a client and a priority before it can be added');
+    if (!item.clientId && !item.isInternal) {
+      throw new Error('every item needs a client, or to be marked internal, before it can be added');
+    }
+    if (!item.priority) {
+      throw new Error('every item needs a priority before it can be added');
     }
     const work = await createWork(db, {
-      clientId: item.clientId,
+      clientId: item.isInternal ? null : item.clientId,
       title: item.title,
+      clientTitle: item.isInternal ? null : (item.clientTitle ?? null),
       description: item.detail,
       workType: item.workType,
       priority: item.priority,
       estMinutes: item.estMinutes ?? 60,
       internalTarget: item.internalTarget,
+      mode: item.mode ?? 'operational',
+      // Internal work is never client-visible, whatever the toggle said.
+      clientVisible: item.isInternal ? false : item.clientVisible,
       origin: 'capture',
     });
     created.push(work.id);

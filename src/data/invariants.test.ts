@@ -80,6 +80,8 @@ describe('INV-1 — only the operator sets priority', () => {
     const item: DraftItem = {
       title: 'Something', clientId: 'c1', clientHint: null, estMinutes: 60,
       priority: null, internalTarget: null, workType: null, detail: null,
+      mode: 'operational', clientTitle: 'Something', clientVisible: true,
+      isInternal: false, confidence: null,
     };
     expect(nextMissingField(item)).toBe('priority');
     expect(nextMissingField({ ...item, priority: 2 })).toBeNull();

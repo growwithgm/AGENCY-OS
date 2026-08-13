@@ -105,6 +105,10 @@ create table if not exists app_users (
 
 -- Reconcile a clients table that predates this file.
 alter table clients add column if not exists contact_email  text;
+-- Identity mark, assigned at creation from a fixed eight. The same client
+-- reads as the same colour on every surface.
+alter table clients add column if not exists color_index    int;
+alter table clients add column if not exists notify_mode    text default 'digest';
 alter table clients add column if not exists locale         text default 'en';
 alter table clients add column if not exists retainer_hours numeric;
 alter table clients add column if not exists status         text default 'active';
@@ -556,6 +560,44 @@ create table if not exists notification_log (
 
 create index if not exists notification_log_kind_idx on notification_log (kind, created_at desc);
 
+-- Non-urgent notifications wait for a delivery window and arrive combined.
+create table if not exists notification_queue (
+  id            uuid primary key default gen_random_uuid(),
+  kind          text not null,
+  title         text not null,
+  body          text,
+  url           text,
+  tag           text,
+  urgent        boolean not null default false,
+  deliver_after timestamptz,
+  delivered_at  timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists notification_queue_pending_idx
+  on notification_queue (delivered_at, created_at);
+
+-- The record of what changed and who changed it.
+--
+-- audit_events records *decisions* (a priority moved, a promise was made).
+-- activity_log records *operations* — including the assistant's — with
+-- enough before/after state to reverse one.
+create table if not exists activity_log (
+  id          uuid primary key default gen_random_uuid(),
+  actor       text not null check (actor in ('operator','assistant','system')),
+  action      text not null,
+  entity_type text,
+  entity_id   uuid,
+  before      jsonb,
+  after       jsonb,
+  instruction text,
+  reverted_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists activity_log_created_idx on activity_log (created_at desc);
+create index if not exists activity_log_entity_idx  on activity_log (entity_type, entity_id);
+
 -- Every LLM call is logged, including reasoning tokens, or cost estimates
 -- are wrong.
 create table if not exists ai_runs (
@@ -607,6 +649,7 @@ begin
     'client_updates','capture_drafts','client_requests','push_subscriptions',
     'notification_settings','notification_log','ai_runs','rate_limit_events',
     'app_users','day_zones','overrun_reasons','client_visibility',
+    'activity_log','notification_queue',
     -- retained from the previous build; nothing writes to these today
     'ai_cache','jobs'
   ]
@@ -649,6 +692,10 @@ select
     when t.status in ('blocked', 'waiting_on_client') then 'waiting'
     else 'upcoming'
   end as client_status,
+  -- The committed date is the one date a client may see: it is the promise
+  -- the operator actually made. internal_target and est_minutes are not
+  -- columns of this view at all, so no query can reach them.
+  t.committed_date,
   t.completed_at,
   t.created_at
 from tasks t
@@ -686,8 +733,8 @@ grant select on client_request_status    to authenticated;
 
 comment on view client_visible_work is
   'Portal projection. A client session has no policy on tasks, so this view is the '
-  'only path — internal_target, committed_date, est_minutes and priority are not '
-  'columns it has.';
+  'only path. internal_target, est_minutes, safe_minutes and priority are not '
+  'columns it has; committed_date is, because it is the promise the operator made.';
 
 -- ───────────────────────────────────────────────────────────────────
 -- 11. Seed

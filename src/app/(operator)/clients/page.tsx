@@ -1,7 +1,8 @@
 import { requireOperator } from '@/lib/auth';
 import { clientSummaries } from '@/data/clients';
-import { relativePhrase } from '@/lib/format';
+import { hm, relativePhrase } from '@/lib/format';
 import { NEGLECT_DAYS } from '@/engines/attention/detect';
+import { ClientName } from '@/components/marks';
 import { createClientAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -11,78 +12,100 @@ export default async function ClientsPage() {
   const { supabase } = await requireOperator();
   const clients = await clientSummaries(supabase);
 
+  const needingAttention = clients.filter((c) => c.neglected).length;
+
   return (
     <main className="screen">
       <div className="head-row">
         <div>
-          <div className="eyebrow">Five brands</div>
+          <div className="eyebrow">
+            {clients.length} {clients.length === 1 ? 'brand' : 'brands'}
+          </div>
           <h1 className="page-title">Clients</h1>
         </div>
+        {needingAttention > 0 && (
+          <span className="small risk-text">
+            <span className="num">{needingAttention}</span> quiet for a while
+          </span>
+        )}
       </div>
 
       {clients.length === 0 && (
         <div className="card">
           <p className="muted">No clients yet.</p>
           <p className="tiny dim" style={{ marginTop: 6 }}>
-            Add one below, then give their team portal access from the client&rsquo;s page.
+            Add one below, then create logins for their team from the client&rsquo;s page.
           </p>
         </div>
       )}
 
-      {clients.map((client) => {
-        const stalePublish = client.daysSincePublished === null
-          || client.daysSincePublished >= NEGLECT_DAYS;
+      <div className="rows">
+        {clients.map((client) => {
+          const stalePublish = client.daysSincePublished === null
+            || client.daysSincePublished >= NEGLECT_DAYS;
 
-        return (
-          <a key={client.id} href={`/clients/${client.id}`} className="work" style={{ display: 'block' }}>
-            <div className="spread">
-              <span style={{ fontWeight: 500, fontSize: 15, color: 'var(--text)' }}>
-                {client.neglected && (
-                  <span
-                    aria-label="Needs attention"
-                    style={{
-                      display: 'inline-block', width: 6, height: 6, borderRadius: 999,
-                      background: 'var(--risk)', marginRight: 8, verticalAlign: 'middle',
-                    }}
-                  />
+          return (
+            <a
+              key={client.id}
+              href={`/clients/${client.id}`}
+              className="rows__row"
+              style={{ color: 'inherit', textDecoration: 'none', alignItems: 'flex-start' }}
+            >
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 600, fontSize: 15 }}>
+                  <ClientName name={client.name} colorIndex={client.color_index} />
+                  {client.neglected && (
+                    <span className="tag tag--blocked" style={{ marginLeft: 8 }}>Quiet</span>
+                  )}
+                </span>
+                <span className="row tiny dim" style={{ gap: 8, marginTop: 4 }}>
+                  <span>
+                    Last finished{' '}
+                    <span className="num">
+                      {client.lastCompletedAt ? relativePhrase(client.lastCompletedAt.slice(0, 10)) : 'never'}
+                    </span>
+                  </span>
+                  <span style={{ color: stalePublish ? 'var(--amber-deep)' : undefined }}>
+                    Last update{' '}
+                    <span className="num">
+                      {client.lastPublishedAt ? relativePhrase(client.lastPublishedAt.slice(0, 10)) : 'never'}
+                    </span>
+                  </span>
+                </span>
+              </span>
+
+              <span className="small num dim" style={{ textAlign: 'right' }}>
+                {client.openWork} open
+                {client.openRequests > 0 && (
+                  <span style={{ display: 'block', color: 'var(--red)' }}>
+                    {client.openRequests} waiting
+                  </span>
                 )}
-                {client.name}
               </span>
-              <span className="tiny num dim">{client.openWork} open</span>
-            </div>
+            </a>
+          );
+        })}
+      </div>
 
-            <div className="work__meta row" style={{ gap: 6 }}>
-              <span className="tag">
-                Last done {client.lastCompletedAt ? relativePhrase(client.lastCompletedAt.slice(0, 10)) : 'never'}
-              </span>
-              <span className={`tag${stalePublish ? ' tag--wait' : ''}`}>
-                Last update {client.lastPublishedAt ? relativePhrase(client.lastPublishedAt.slice(0, 10)) : 'never'}
-              </span>
-              {client.openRequests > 0 && (
-                <span className="tag tag--risk">{client.openRequests} request{client.openRequests === 1 ? '' : 's'}</span>
-              )}
-            </div>
-          </a>
-        );
-      })}
-
-      <details style={{ marginTop: 16 }}>
-        <summary className="btn btn--sm" style={{ display: 'inline-flex' }}>Add a client</summary>
-        <form action={createClientAction} className="stack" style={{ marginTop: 12 }}>
-          <label className="field">
-            <span className="label">Name</span>
-            <input name="name" required placeholder="ibBan" className="input" />
-          </label>
-          <label className="field">
-            <span className="label">Portal language</span>
-            <select name="locale" defaultValue="en" className="input">
-              <option value="en">English</option>
-              <option value="es">Spanish</option>
-            </select>
-          </label>
-          <button type="submit" className="btn">Add client</button>
-        </form>
-      </details>
+      <div className="section-label"><span>Add a client</span></div>
+      <form action={createClientAction} className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+        <label className="field" style={{ flex: '2 1 200px' }}>
+          <span className="label">Name</span>
+          <input name="name" required className="input" placeholder="ibBan" />
+        </label>
+        <label className="field" style={{ flex: '1 1 120px' }}>
+          <span className="label">Their language</span>
+          <select name="locale" className="input" defaultValue="en">
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+          </select>
+        </label>
+        <button type="submit" className="btn">Add</button>
+      </form>
+      <p className="tiny dim" style={{ marginTop: 8 }}>
+        Their language decides what their portal and updates are written in. It changes
+        nothing on your side.
+      </p>
     </main>
   );
 }

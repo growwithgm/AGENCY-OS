@@ -12,6 +12,7 @@ import { PARSE_CAPTURE_SYSTEM } from '../prompts';
 import { aiConfigured } from '@/lib/env';
 import { todayKey } from '@/lib/format';
 import type { DraftItem } from '@/data/capture';
+import type { WorkMode } from '@/data/types';
 
 const schema = {
   type: 'object',
@@ -46,6 +47,9 @@ type ParsedItem = {
   internal_target: string | null;
   work_type: string | null;
   detail: string | null;
+  mode: WorkMode;
+  client_title: string | null;
+  confidence: number;
 };
 
 export type ParseResult = {
@@ -70,15 +74,23 @@ export function fallbackParse(rawInput: string, clients: { id: string; name: str
   const lower = rawInput.toLowerCase();
   const matched = clients.find((c) => lower.includes(c.name.toLowerCase()));
 
+  const title = rawInput.length > 80 ? `${rawInput.slice(0, 77)}…` : rawInput;
   const items: DraftItem[] = [{
-    title: rawInput.length > 80 ? `${rawInput.slice(0, 77)}…` : rawInput,
+    title,
     clientId: matched?.id ?? null,
-    clientHint: matched ? null : null,
+    clientHint: null,
     estMinutes: null,
     priority: null,
     internalTarget: null,
     workType: null,
     detail: rawInput,
+    // Without a model there is nothing to judge the mode from, so the
+    // cheapest-to-correct answer is the one the operator sees and changes.
+    mode: 'operational',
+    clientTitle: title,
+    clientVisible: true,
+    isInternal: false,
+    confidence: null,
   }];
 
   return { items, missingFields: missingFor(items), source: 'fallback' };
@@ -120,6 +132,11 @@ export async function parseCapture(
       internalTarget: item.internal_target,
       workType: item.work_type,
       detail: item.detail,
+      mode: item.mode ?? 'operational',
+      clientTitle: item.client_title ?? item.title,
+      clientVisible: true,
+      isInternal: false,
+      confidence: typeof item.confidence === 'number' ? item.confidence : null,
     }));
 
     if (items.length === 0) return fallbackParse(rawInput, clients);

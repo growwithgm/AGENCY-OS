@@ -19,12 +19,24 @@ export const STATUS_LABELS: Record<WorkStatus, string> = {
   done: 'Done',
 };
 
+export type WorkMode = 'creative' | 'technical' | 'analytical' | 'operational';
+
+export const MODE_LABELS: Record<WorkMode, string> = {
+  creative: 'Creative',
+  technical: 'Technical',
+  analytical: 'Analytical',
+  operational: 'Operational',
+};
+
 export type WorkRow = {
   id: string;
   client_id: string;
   project_id: string | null;
   title: string;
   client_title: string | null;
+  mode: WorkMode;
+  safe_minutes: number | null;
+  is_touchpoint: boolean;
   description: string | null;
   status: WorkStatus;
   priority: number;
@@ -51,4 +63,19 @@ export type ClientRow = {
   brand_slug: string;
   locale: string | null;
   status: string;
+  color_index: number | null;
+  notify_mode: string | null;
 };
+
+/**
+ * The fixed eight. A client's mark is the same colour everywhere it
+ * appears — a colour that changes between screens is not an identity.
+ */
+export const CLIENT_COLORS = [
+  '#35618c', '#8a6a1c', '#2f513d', '#7a3d5c',
+  '#2c5378', '#6a4d16', '#3c4854', '#a52d17',
+];
+
+export function clientColor(index: number | null | undefined): string {
+  return CLIENT_COLORS[(index ?? 0) % CLIENT_COLORS.length];
+}

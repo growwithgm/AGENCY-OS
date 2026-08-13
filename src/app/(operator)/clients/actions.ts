@@ -5,6 +5,7 @@ import { requireOperator } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { provisionClientLogin, setLoginDisabled, deleteLogin } from '@/lib/authFlow';
 import { recordAudit } from '@/lib/audit';
+import { CLIENT_COLORS } from '@/data/types';
 import { createDraft, editDraft, publishUpdate } from '@/data/updates';
 import { listWork } from '@/data/work';
 import { getClient } from '@/data/clients';
@@ -93,14 +94,82 @@ export async function createClientAction(form: FormData) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
     || `client-${Date.now()}`;
 
-  const { error } = await supabase.from('clients').insert({
+  // The colour mark is assigned once, in order, so the same client reads
+  // as the same colour on every surface for as long as it exists.
+  const { count } = await supabase.from('clients').select('id', { count: 'exact', head: true });
+
+  const { data: created, error } = await supabase.from('clients').insert({
     name,
     brand_slug: slug,
     locale: String(form.get('locale') ?? 'en'),
     status: 'active',
-  });
+    color_index: (count ?? 0) % CLIENT_COLORS.length,
+    notify_mode: 'digest',
+  }).select('id').single();
   if (error) throw new Error(error.message);
 
+  // Start the rotation clock now, so a new client counts as seen today
+  // rather than as starved since the beginning of time.
+  if (created) {
+    await supabase.from('client_visibility').upsert({
+      client_id: created.id,
+      target_days: 3,
+      last_visible_completion: new Date().toISOString(),
+    });
+  }
+
+  revalidatePath('/clients');
+}
+
+export async function saveClientSettingsAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const clientId = String(form.get('client_id') ?? '');
+  if (!clientId) throw new Error('client_id is required');
+
+  const targetDays = Math.min(Math.max(Number(form.get('target_days') ?? 3), 1), 30);
+
+  await supabase.from('clients').update({
+    locale: String(form.get('locale') ?? 'en'),
+    notify_mode: String(form.get('notify_mode') ?? 'digest'),
+  }).eq('id', clientId);
+
+  await supabase.from('client_visibility').upsert({ client_id: clientId, target_days: targetDays });
+
+  revalidatePath(`/clients/${clientId}`);
+}
+
+/**
+ * Archive a client. Their work and published updates are kept; what ends
+ * is access — every login is disabled, which also ends sessions already
+ * open, and notifications to them stop.
+ */
+export async function archiveClientAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const clientId = String(form.get('client_id') ?? '');
+  if (!clientId) throw new Error('client_id is required');
+
+  const { data: contacts } = await supabase.from('client_contacts')
+    .select('id, auth_user_id').eq('client_id', clientId);
+
+  for (const contact of contacts ?? []) {
+    if (contact.auth_user_id) await setLoginDisabled(contact.auth_user_id, true);
+  }
+  await supabase.from('client_contacts').update({ active: false }).eq('client_id', clientId);
+
+  await supabase.from('clients')
+    .update({ status: 'archived', notify_mode: 'never' })
+    .eq('id', clientId);
+
+  await recordAudit({
+    type: 'login_disabled',
+    subjectTable: 'clients',
+    subjectId: clientId,
+    note: `client archived; ${contacts?.length ?? 0} logins disabled`,
+  });
+
+  revalidatePath(`/clients/${clientId}`);
   revalidatePath('/clients');
 }
 

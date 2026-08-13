@@ -14,7 +14,7 @@ export type ClientSummary = ClientRow & {
 
 export async function listClients(db: SupabaseClient): Promise<ClientRow[]> {
   const { data } = await db.from('clients')
-    .select('id, name, brand_slug, locale, status')
+    .select('id, name, brand_slug, locale, status, color_index, notify_mode')
     .eq('status', 'active')
     .order('name');
   return (data ?? []) as ClientRow[];
@@ -22,7 +22,7 @@ export async function listClients(db: SupabaseClient): Promise<ClientRow[]> {
 
 export async function getClient(db: SupabaseClient, id: string): Promise<ClientRow | null> {
   const { data } = await db.from('clients')
-    .select('id, name, brand_slug, locale, status')
+    .select('id, name, brand_slug, locale, status, color_index, notify_mode')
     .eq('id', id)
     .maybeSingle();
   return (data as ClientRow) ?? null;

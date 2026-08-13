@@ -8,13 +8,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAudit } from '@/lib/audit';
 import { replan } from './planning';
-import type { WorkRow, WorkStatus } from './types';
+import type { WorkMode, WorkRow, WorkStatus } from './types';
 
 const WORK_COLUMNS =
   'id, client_id, project_id, title, client_title, description, status, priority, '
   + 'est_minutes, actual_minutes, client_requested_date, internal_target, committed_date, '
   + 'client_visible, work_type, slid_count, blocked_reason, origin, recurrence_rule_id, '
-  + 'source_request_id, created_at, completed_at';
+  + 'source_request_id, created_at, completed_at, mode, safe_minutes, is_touchpoint';
 
 export async function listWork(
   db: SupabaseClient,
@@ -41,7 +41,8 @@ export async function getWork(db: SupabaseClient, id: string): Promise<WorkRow |
 }
 
 export type CreateWorkInput = {
-  clientId: string;
+  /** Null only for the operator's own internal work, which no client sees. */
+  clientId: string | null;
   title: string;
   /** Always supplied by the operator — never defaulted, never inferred (INV-1). */
   priority: number;
@@ -57,6 +58,9 @@ export type CreateWorkInput = {
   origin?: string;
   sourceRequestId?: string | null;
   recurrenceRuleId?: string | null;
+  mode?: WorkMode;
+  safeMinutes?: number | null;
+  isTouchpoint?: boolean;
 };
 
 export async function createWork(db: SupabaseClient, input: CreateWorkInput): Promise<WorkRow> {
@@ -75,6 +79,9 @@ export async function createWork(db: SupabaseClient, input: CreateWorkInput): Pr
     origin: input.origin ?? 'operator',
     source_request_id: input.sourceRequestId ?? null,
     recurrence_rule_id: input.recurrenceRuleId ?? null,
+    mode: input.mode ?? 'operational',
+    safe_minutes: input.safeMinutes ?? null,
+    is_touchpoint: input.isTouchpoint ?? false,
     status: 'backlog',
   }).select(WORK_COLUMNS).single<WorkRow>();
 
@@ -115,6 +122,8 @@ export type UpdateWorkInput = {
   clientVisible?: boolean;
   status?: WorkStatus;
   blockedReason?: string | null;
+  mode?: WorkMode;
+  safeMinutes?: number | null;
 };
 
 export async function updateWork(
@@ -139,6 +148,8 @@ export async function updateWork(
   if (input.clientVisible !== undefined) patch.client_visible = input.clientVisible;
   if (input.status !== undefined) patch.status = input.status;
   if (input.blockedReason !== undefined) patch.blocked_reason = input.blockedReason;
+  if (input.mode !== undefined) patch.mode = input.mode;
+  if (input.safeMinutes !== undefined) patch.safe_minutes = input.safeMinutes;
 
   if (Object.keys(patch).length === 0) return before;
 

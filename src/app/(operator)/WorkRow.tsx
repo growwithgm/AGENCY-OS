@@ -2,21 +2,23 @@
 
 import { useState } from 'react';
 import { hm, hmShort, relativePhrase, shortDate } from '@/lib/format';
-import { PRIORITY_LABELS } from '@/data/types';
+import { PRIORITY_LABELS, type WorkMode } from '@/data/types';
+import { ClientName, ModeChip } from '@/components/marks';
 import { completeWorkAction, pushWorkAction, startWorkAction } from './actions';
 
 export type WorkRowData = {
   id: string;
   title: string;
   clientName: string | null;
+  colorIndex: number | null;
   status: string;
   priority: number;
+  mode: WorkMode;
   minutes: number;
   estMinutes: number;
   actualMinutes: number;
   committedDate: string | null;
   internalTarget: string | null;
-  workType: string | null;
   slidCount: number;
   atRisk?: boolean;
   riskNote?: string | null;
@@ -31,14 +33,12 @@ export function WorkRow({ item, showActions = true }: { item: WorkRowData; showA
   const [open, setOpen] = useState(false);
 
   const active = item.status === 'in_progress';
-  const classes = ['work'];
-  if (active) classes.push('work--active');
-  if (item.atRisk) classes.push('work--risk');
-
-  const reason = whyHere(item);
+  const classes = ['card'];
+  if (active) classes.push('card--accent');
+  if (item.atRisk) classes.push('card--over');
 
   return (
-    <div className={classes.join(' ')}>
+    <div className={classes.join(' ')} style={{ marginBottom: 8 }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -46,73 +46,77 @@ export function WorkRow({ item, showActions = true }: { item: WorkRowData; showA
         style={{ all: 'unset', display: 'block', width: '100%', cursor: 'pointer' }}
       >
         <div className="spread">
-          <span className="work__client">{item.clientName ?? 'No client'}</span>
-          <span className="small num muted">
+          <span className="small dim">
+            <ClientName name={item.clientName} colorIndex={item.colorIndex} />
+          </span>
+          <span className="small num dim">
             {active
               ? `${hm(item.actualMinutes)} of ${hm(item.estMinutes)} elapsed`
               : hmShort(item.minutes)}
           </span>
         </div>
 
-        <div className="work__title">{item.title}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.01em', margin: '4px 0 6px' }}>
+          {item.title}
+        </div>
 
-        <div className="work__meta row" style={{ gap: 6 }}>
-          {item.workType && <span className="tag tag--info">{item.workType}</span>}
+        <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+          <ModeChip mode={item.mode} />
           {item.committedDate && (
-            <span className="tag">Committed {shortDate(item.committedDate)}</span>
+            <span className="tag">Committed <span className="num">{shortDate(item.committedDate)}</span></span>
           )}
           {!item.committedDate && item.internalTarget && (
-            <span className="tag tag--info">Target {shortDate(item.internalTarget)}</span>
+            <span className="tag tag--info">Target <span className="num">{shortDate(item.internalTarget)}</span></span>
           )}
           {item.slidCount > 0 && (
-            <span className="tag tag--wait">Slid ×{item.slidCount}</span>
+            <span className="tag tag--blocked">Moved <span className="num">{item.slidCount}×</span></span>
           )}
-          {item.atRisk && <span className="tag tag--risk">At risk</span>}
+          {item.atRisk && <span className="tag tag--blocked">At risk</span>}
         </div>
       </button>
 
       {open && (
-        <div className="why">
-          <div>{reason}</div>
-          {item.riskNote && <div className="risk-text" style={{ marginTop: 6 }}>{item.riskNote}</div>}
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+          <div className="small dim">{whyHere(item)}</div>
+          {item.riskNote && <div className="small risk-text" style={{ marginTop: 6 }}>{item.riskNote}</div>}
 
           {showActions && (
-            <div className="row" style={{ marginTop: 10, gap: 8 }}>
-              {!active && (
-                <form action={startWorkAction}>
+            <>
+              <div className="row" style={{ marginTop: 10, gap: 8 }}>
+                {!active && (
+                  <form action={startWorkAction}>
+                    <input type="hidden" name="work_id" value={item.id} />
+                    <button type="submit" className="btn btn--sm btn--primary">Do this now</button>
+                  </form>
+                )}
+
+                <form action={completeWorkAction} className="row" style={{ gap: 6 }}>
                   <input type="hidden" name="work_id" value={item.id} />
-                  <button type="submit" className="btn btn--sm">Start</button>
+                  <input
+                    name="minutes"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder="mins"
+                    aria-label="Actual minutes"
+                    className="input"
+                    style={{ width: 84, minHeight: 34, fontSize: 14, padding: '6px 10px' }}
+                  />
+                  <button type="submit" className="btn btn--sm">Done</button>
                 </form>
-              )}
 
-              <form action={completeWorkAction} className="row" style={{ gap: 6 }}>
-                <input type="hidden" name="work_id" value={item.id} />
-                <input
-                  name="minutes"
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  placeholder="mins"
-                  aria-label="Actual minutes"
-                  className="input"
-                  style={{ width: 88, minHeight: 34, fontSize: 14, padding: '6px 10px' }}
-                />
-                <button type="submit" className="btn btn--sm">Done</button>
-              </form>
+                <form action={pushWorkAction}>
+                  <input type="hidden" name="work_id" value={item.id} />
+                  <button type="submit" className="btn btn--sm">Push</button>
+                </form>
 
-              <form action={pushWorkAction}>
-                <input type="hidden" name="work_id" value={item.id} />
-                <button type="submit" className="btn btn--sm">Push</button>
-              </form>
+                <a href={`/work/${item.id}`} className="btn btn--sm btn--quiet">Open</a>
+              </div>
 
-              <a href={`/work/${item.id}`} className="btn btn--sm btn--quiet">Detail</a>
-            </div>
-          )}
-
-          {showActions && (
-            <p className="tiny dim" style={{ marginTop: 8 }}>
-              Pushing moves the plan and counts a slide. The committed date does not change.
-            </p>
+              <p className="tiny dim" style={{ marginTop: 8 }}>
+                Pushing moves the plan and counts a move. The committed date does not change.
+              </p>
+            </>
           )}
         </div>
       )}
@@ -134,9 +138,7 @@ function whyHere(item: WorkRowData): string {
 
   parts.push(`priority ${PRIORITY_LABELS[item.priority] ?? item.priority}`);
 
-  if (item.slidCount > 0) {
-    parts.push(`rolled forward ${item.slidCount}×`);
-  }
+  if (item.slidCount > 0) parts.push(`moved forward ${item.slidCount}×`);
 
   return parts.join(' · ');
 }

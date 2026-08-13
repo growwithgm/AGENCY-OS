@@ -22,7 +22,7 @@ export default async function CapturePage() {
         <a href="/" className="btn btn--sm">Cancel</a>
       </div>
 
-      <CaptureFlow clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
+      <CaptureFlow clients={clients.map((c) => ({ id: c.id, name: c.name, colorIndex: c.color_index }))} />
     </main>
   );
 }

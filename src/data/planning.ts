@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { plan, dayCapacities, ENGINE_VERSION } from '@/engines/planner/plan';
+import { generateZonedSlots } from '@/engines/planner/zones';
 import { plannedDays, slideUpdates } from '@/engines/planner/carryForward';
 import type { DayZone, PlanResult, PlanTask, VisibilityState, WorkMode } from '@/engines/planner/types';
 import { recordAudit } from '@/lib/audit';
@@ -156,9 +157,12 @@ export type TodayView = {
   date: string;
   availableMinutes: number;
   plannedMinutes: number;
+  /** Tomorrow's rail, so the two days can be compared on one scale. */
+  tomorrow: { date: string; availableMinutes: number; plannedMinutes: number };
   items: {
     task: PlanTask;
     clientName: string | null;
+    clientColorIndex: number | null;
     minutes: number;
     blockIds: string[];
     firstStart: string;
@@ -182,23 +186,28 @@ export async function todayView(db: SupabaseClient, now = new Date()): Promise<T
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
   const key = dateKey(dayStart);
 
-  const [blocksRes, rulesRes, blackoutsRes] = await Promise.all([
+  const [blocksRes, rulesRes, blackoutsRes, zonesRes, tomorrowRes] = await Promise.all([
     db.from('schedule_blocks')
-      .select('id, task_id, starts_at, ends_at, tasks(id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count, clients(name))')
+      .select('id, task_id, starts_at, ends_at, tasks(id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count, mode, safe_minutes, client_visible, clients(name, color_index))')
       .gte('starts_at', dayStart.toISOString())
       .lt('starts_at', dayEnd.toISOString())
       .order('starts_at'),
     db.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
     db.from('blackouts').select('starts_at, ends_at'),
+    db.from('day_zones').select('weekday, name, start_time, end_time, modes'),
+    db.from('schedule_blocks')
+      .select('starts_at, ends_at')
+      .gte('starts_at', dayEnd.toISOString())
+      .lt('starts_at', new Date(dayEnd.getTime() + 86_400_000).toISOString()),
   ]);
 
   type BlockRow = {
     id: string; task_id: string; starts_at: string; ends_at: string;
-    tasks: (PlanTask & { clients: { name: string } | null }) | null;
+    tasks: (PlanTask & { clients: { name: string; color_index: number | null } | null }) | null;
   };
   const blocks = (blocksRes.data ?? []) as unknown as BlockRow[];
 
-  const byTask = new Map<string, { task: PlanTask & { clients: { name: string } | null }; minutes: number; ids: string[]; firstStart: string }>();
+  const byTask = new Map<string, { task: PlanTask & { clients: { name: string; color_index: number | null } | null }; minutes: number; ids: string[]; firstStart: string }>();
   for (const b of blocks) {
     if (!b.tasks) continue;
     const minutes = (Date.parse(b.ends_at) - Date.parse(b.starts_at)) / 60000;
@@ -211,13 +220,34 @@ export async function todayView(db: SupabaseClient, now = new Date()): Promise<T
     }
   }
 
-  // Available time for today, ignoring the plan itself.
-  const capacities = dayCapacities(dayStart, 1, rulesRes.data ?? [], blackoutsRes.data ?? [], []);
-  const available = capacities.find((c) => c.date === key)?.availableMinutes ?? 0;
+  // Available time, ignoring the plan itself. With zones configured, the
+  // zones are the day's shape; without them, the old working-hours rules.
+  const zones: DayZone[] = (zonesRes.data ?? []).map((z) => ({
+    weekday: z.weekday,
+    name: z.name,
+    start_time: String(z.start_time).slice(0, 5),
+    end_time: String(z.end_time).slice(0, 5),
+    modes: z.modes as WorkMode[],
+  }));
+
+  const availableFor = (start: Date, dateKeyValue: string): number => {
+    if (zones.length > 0) {
+      return Math.round(
+        generateZonedSlots(start, 1, zones, blackoutsRes.data ?? [], [], rulesRes.data ?? [])
+          .filter((s) => s.day === dateKeyValue)
+          .reduce((sum, s) => sum + (s.end.getTime() - s.start.getTime()) / 60_000, 0),
+      );
+    }
+    return dayCapacities(start, 1, rulesRes.data ?? [], blackoutsRes.data ?? [], [])
+      .find((c) => c.date === dateKeyValue)?.availableMinutes ?? 0;
+  };
+
+  const available = availableFor(dayStart, key);
 
   const items = [...byTask.values()].map((entry) => ({
     task: entry.task,
     clientName: entry.task.clients?.name ?? null,
+    clientColorIndex: entry.task.clients?.color_index ?? null,
     minutes: Math.round(entry.minutes),
     blockIds: entry.ids,
     firstStart: entry.firstStart,
@@ -227,7 +257,26 @@ export async function todayView(db: SupabaseClient, now = new Date()): Promise<T
 
   const plannedMinutes = items.reduce((t, i) => t + i.minutes, 0);
 
-  return { date: key, availableMinutes: available, plannedMinutes, items, willNotFit: [] };
+  const tomorrowKey = dateKey(dayEnd);
+  const tomorrowPlanned = Math.round(
+    (tomorrowRes.data ?? []).reduce(
+      (sum, b) => sum + (Date.parse(b.ends_at) - Date.parse(b.starts_at)) / 60_000,
+      0,
+    ),
+  );
+
+  return {
+    date: key,
+    availableMinutes: available,
+    plannedMinutes,
+    tomorrow: {
+      date: tomorrowKey,
+      availableMinutes: availableFor(dayEnd, tomorrowKey),
+      plannedMinutes: tomorrowPlanned,
+    },
+    items,
+    willNotFit: [],
+  };
 }
 
 export { ENGINE_VERSION };
