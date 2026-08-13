@@ -9,6 +9,8 @@ import {
   type DraftItem,
 } from '@/data/capture';
 import { parseCapture } from '@/ai/jobs/parseCapture';
+import { referenceClassFor } from '@/data/work';
+import type { Distribution } from '@/engines/estimates/referenceClass';
 
 export type CaptureState = {
   stage: 'input' | 'review';
@@ -17,6 +19,8 @@ export type CaptureState = {
   parsedBy?: 'ai' | 'fallback' | 'operator';
   rawInput?: string;
   error?: string;
+  /** What work like each item has actually taken, one per item. */
+  references?: Distribution[];
 };
 
 /**
@@ -47,12 +51,20 @@ export async function parseCaptureAction(
 
   revalidatePath('/inbox');
 
+  // The evidence is fetched before the estimate is asked for, because the
+  // first number a person reaches for is the one they anchor on.
+  const references = await Promise.all(
+    parsed.items.map((item) =>
+      referenceClassFor(supabase, item.title, item.mode ?? 'operational')),
+  );
+
   return {
     stage: 'review',
     draftId: draft.id,
     items: parsed.items,
     parsedBy: parsed.source,
     rawInput,
+    references,
   };
 }
 
@@ -84,7 +96,7 @@ export async function saveItemAction(form: FormData): Promise<void> {
   // Only fields the review screen owns. Anything else is ignored rather
   // than trusted, because this arrives as JSON from the browser.
   const allowed: (keyof DraftItem)[] = [
-    'clientId', 'isInternal', 'estMinutes', 'priority',
+    'clientId', 'isInternal', 'estMinutes', 'priority', 'belowMedianReason',
     'mode', 'clientTitle', 'clientVisible', 'internalTarget', 'title',
   ];
   for (const key of allowed) {

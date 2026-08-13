@@ -9,6 +9,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAudit } from '@/lib/audit';
 import { replan } from './planning';
 import type { WorkMode, WorkRow, WorkStatus } from './types';
+import {
+  distributionFor, overran, overrunFactor, safeMinutes,
+  type Distribution, type OverrunReason, type Sample,
+} from '@/engines/estimates/referenceClass';
 
 const WORK_COLUMNS =
   'id, client_id, project_id, title, client_title, description, status, priority, '
@@ -61,9 +65,18 @@ export type CreateWorkInput = {
   mode?: WorkMode;
   safeMinutes?: number | null;
   isTouchpoint?: boolean;
+  /** Why this beats the reference class, when it does. */
+  estimateReason?: string | null;
 };
 
 export async function createWork(db: SupabaseClient, input: CreateWorkInput): Promise<WorkRow> {
+  // The commitment-grade estimate is derived, not asked for: the operator
+  // gives one honest number and the system pads it by what this mode of
+  // work has actually overrun by.
+  const mode = input.mode ?? 'operational';
+  const safe = input.safeMinutes
+    ?? safeMinutes(input.estMinutes, await modeOverrunFactor(db, mode));
+
   const { data, error } = await db.from('tasks').insert({
     client_id: input.clientId,
     title: input.title,
@@ -79,8 +92,8 @@ export async function createWork(db: SupabaseClient, input: CreateWorkInput): Pr
     origin: input.origin ?? 'operator',
     source_request_id: input.sourceRequestId ?? null,
     recurrence_rule_id: input.recurrenceRuleId ?? null,
-    mode: input.mode ?? 'operational',
-    safe_minutes: input.safeMinutes ?? null,
+    mode,
+    safe_minutes: safe,
     is_touchpoint: input.isTouchpoint ?? false,
     status: 'backlog',
   }).select(WORK_COLUMNS).single<WorkRow>();
@@ -91,8 +104,11 @@ export async function createWork(db: SupabaseClient, input: CreateWorkInput): Pr
   // appended to (INV-12).
   await db.from('estimate_history').insert({
     task_id: data.id,
+    client_id: input.clientId,
+    mode,
+    title: input.title,
     est_minutes: input.estMinutes,
-    reason: 'original',
+    reason: input.estimateReason ? `original — ${input.estimateReason}` : 'original',
   });
 
   if (input.committedDate) {
@@ -150,6 +166,14 @@ export async function updateWork(
   if (input.blockedReason !== undefined) patch.blocked_reason = input.blockedReason;
   if (input.mode !== undefined) patch.mode = input.mode;
   if (input.safeMinutes !== undefined) patch.safe_minutes = input.safeMinutes;
+
+  // A new estimate or a new mode changes what may honestly be promised.
+  if (input.safeMinutes === undefined
+      && (input.estMinutes !== undefined || input.mode !== undefined)) {
+    const mode = input.mode ?? before.mode ?? 'operational';
+    const est = input.estMinutes ?? before.est_minutes ?? 0;
+    patch.safe_minutes = safeMinutes(est, await modeOverrunFactor(db, mode));
+  }
 
   if (Object.keys(patch).length === 0) return before;
 
@@ -210,9 +234,10 @@ export async function completeWork(
   id: string,
   minutes: number | null,
   actor?: string,
-): Promise<void> {
+): Promise<{ overranBy: number | null }> {
   const { data: current } = await db.from('tasks')
-    .select('actual_minutes, title').eq('id', id).maybeSingle();
+    .select('actual_minutes, title, mode, client_id, est_minutes, client_visible')
+    .eq('id', id).maybeSingle();
 
   await db.from('effort_records').insert({
     task_id: id,
@@ -221,11 +246,37 @@ export async function completeWork(
     ended_at: new Date().toISOString(),
   });
 
+  const total = (current?.actual_minutes ?? 0) + (minutes ?? 0);
+  const completedAt = new Date().toISOString();
+
   await db.from('tasks').update({
     status: 'done',
-    completed_at: new Date().toISOString(),
-    actual_minutes: (current?.actual_minutes ?? 0) + (minutes ?? 0),
+    completed_at: completedAt,
+    actual_minutes: total,
   }).eq('id', id);
+
+  // The reference class is only ever built from work with a real recorded
+  // duration. Skipping the minutes records that there is no evidence
+  // (INV-10) — it must not quietly become a zero in the statistics.
+  if (minutes !== null && current) {
+    await db.from('estimate_history').insert({
+      task_id: id,
+      client_id: current.client_id,
+      mode: current.mode ?? 'operational',
+      title: current.title,
+      est_minutes: current.est_minutes ?? 0,
+      actual_minutes: total,
+      reason: 'completed',
+    });
+  }
+
+  // Rotation: this client has now seen something finish.
+  if (current?.client_id && current.client_visible) {
+    await db.from('client_visibility').upsert({
+      client_id: current.client_id,
+      last_visible_completion: completedAt,
+    });
+  }
 
   await recordAudit({
     type: 'work_completed',
@@ -237,6 +288,88 @@ export async function completeWork(
   });
 
   await replan(db);
+
+  const est = current?.est_minutes ?? 0;
+  return {
+    overranBy: minutes !== null && overran(est, total) ? total - est : null,
+  };
+}
+
+/**
+ * Work finished in the last few hours that ran well over and has not been
+ * asked about yet. The question is only useful while the answer is still
+ * in the operator's head, so it expires rather than accumulating.
+ */
+export async function unexplainedOverruns(db: SupabaseClient, withinHours = 6) {
+  const since = new Date(Date.now() - withinHours * 3600_000).toISOString();
+
+  const { data } = await db.from('tasks')
+    .select('id, title, est_minutes, actual_minutes')
+    .eq('status', 'done')
+    .gte('completed_at', since)
+    .order('completed_at', { ascending: false })
+    .limit(10);
+
+  const candidates = (data ?? []).filter(
+    (t) => overran(t.est_minutes ?? 0, t.actual_minutes ?? 0),
+  );
+  if (candidates.length === 0) return [];
+
+  const { data: asked } = await db.from('overrun_reasons')
+    .select('task_id').in('task_id', candidates.map((t) => t.id));
+  const answered = new Set((asked ?? []).map((r) => r.task_id));
+
+  return candidates
+    .filter((t) => !answered.has(t.id))
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      overrunMinutes: (t.actual_minutes ?? 0) - (t.est_minutes ?? 0),
+    }));
+}
+
+/** Record why a job ran over. Asked once, at completion, as one question. */
+export async function recordOverrunReason(
+  db: SupabaseClient,
+  taskId: string,
+  reason: OverrunReason,
+  overrunMinutes: number,
+): Promise<void> {
+  await db.from('overrun_reasons').insert({
+    task_id: taskId,
+    reason,
+    overrun_minutes: overrunMinutes,
+  });
+}
+
+/**
+ * The reference class for a piece of work: what jobs like it have taken.
+ * Read before an estimate is typed — an anchor from evidence rather than
+ * from the first number that comes to mind.
+ */
+export async function referenceClassFor(
+  db: SupabaseClient,
+  title: string,
+  mode: string,
+): Promise<Distribution> {
+  const { data } = await db.from('estimate_history')
+    .select('title, mode, est_minutes, actual_minutes')
+    .not('actual_minutes', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(400);
+
+  return distributionFor((data ?? []) as Sample[], title, mode);
+}
+
+/** The multiplier behind a commitment-grade estimate, per mode. */
+export async function modeOverrunFactor(db: SupabaseClient, mode: string): Promise<number> {
+  const { data } = await db.from('estimate_history')
+    .select('title, mode, est_minutes, actual_minutes')
+    .eq('mode', mode)
+    .not('actual_minutes', 'is', null)
+    .limit(400);
+
+  return overrunFactor((data ?? []) as Sample[], mode);
 }
 
 /**

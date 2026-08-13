@@ -9,7 +9,8 @@
 
 import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
-import { effortFor, estimateHistoryFor, getWork } from '@/data/work';
+import { effortFor, estimateHistoryFor, getWork, referenceClassFor } from '@/data/work';
+import { ReferenceClass } from '@/components/ReferenceClass';
 import { getClient } from '@/data/clients';
 import { listActivity, type ActivityEntry } from '@/data/activity';
 import { hm, hmSigned, relativePhrase, shortDate } from '@/lib/format';
@@ -35,11 +36,12 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
   const work = await getWork(supabase, id);
   if (!work) notFound();
 
-  const [client, history, effort, activity] = await Promise.all([
+  const [client, history, effort, activity, reference] = await Promise.all([
     getClient(supabase, work.client_id),
     estimateHistoryFor(supabase, id),
     effortFor(supabase, id),
     listActivity(supabase, { limit: 200 }),
+    referenceClassFor(supabase, work.title, work.mode ?? 'operational'),
   ]);
 
   const unrecordedSessions = effort.filter((e) => e.minutes === null).length;
@@ -202,8 +204,17 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
         </p>
       )}
 
+      <ReferenceClass distribution={reference} />
+
       <form action={setEstimateAction} className="stack" style={{ marginTop: 10, gap: 6 }}>
         <input type="hidden" name="work_id" value={work.id} />
+        {reference.status === 'ready' && (
+          <p className="tiny dim">
+            Below the median of <span className="num">{hm(reference.median)}</span>? Say what makes
+            this one faster in the reason field — an estimate that beats the record needs something
+            specific behind it.
+          </p>
+        )}
         <div className="row" style={{ gap: 6, alignItems: 'flex-end' }}>
           <div className="field">
             <label className="label" htmlFor="est_minutes">New estimate (minutes)</label>

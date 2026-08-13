@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireOperator } from '@/lib/auth';
-import { completeWork, pushWork, updateWork } from '@/data/work';
+import { completeWork, pushWork, recordOverrunReason, updateWork } from '@/data/work';
+import type { OverrunReason } from '@/engines/estimates/referenceClass';
 import { replan } from '@/data/planning';
 import { refreshSignals } from '@/data/attention';
 
@@ -30,6 +31,21 @@ export async function completeWorkAction(form: FormData) {
   revalidatePath('/');
   revalidatePath('/week');
   revalidatePath(`/work/${id}`);
+}
+
+/**
+ * Why a job ran over. Skip writes nothing at all — an invented reason
+ * would pollute the only evidence the weekly review has.
+ */
+export async function recordOverrunAction(form: FormData) {
+  const { supabase } = await requireOperator();
+  const taskId = String(form.get('task_id') ?? '');
+  const reason = String(form.get('reason') ?? '') as OverrunReason;
+  const minutes = Number(form.get('overrun_minutes') ?? 0);
+  if (!taskId || !reason) return;
+
+  await recordOverrunReason(supabase, taskId, reason, Math.max(0, Math.round(minutes)));
+  revalidatePath('/review');
 }
 
 /** Push moves the plan. It never touches the commitment (INV-5). */

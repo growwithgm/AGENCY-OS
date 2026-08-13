@@ -12,12 +12,14 @@ import { requireOperator } from '@/lib/auth';
 import { plan } from '@/engines/planner/plan';
 import { loadPlanInputs, todayView } from '@/data/planning';
 import { openSignals } from '@/data/attention';
+import { unexplainedOverruns } from '@/data/work';
 import { dayShape } from '@/data/zones';
 import { hm, longDate, shortDate } from '@/lib/format';
 import { Capacity } from './Capacity';
 import { DayShape } from './DayShape';
 import { RunningNow } from './RunningNow';
 import { Flags } from './Flags';
+import { OverrunAsk } from './OverrunAsk';
 import { WorkRow, type WorkRowData } from './WorkRow';
 
 export const dynamic = 'force-dynamic';
@@ -26,11 +28,12 @@ export default async function TodayPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, planInput, shape] = await Promise.all([
+  const [view, signals, planInput, shape, overruns] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     loadPlanInputs(supabase, now),
     dayShape(supabase, now),
+    unexplainedOverruns(supabase),
   ]);
 
   // At-risk is recomputed from the same engine the plan came from, so the
@@ -112,6 +115,12 @@ export default async function TodayPage() {
       <div style={{ marginTop: 16 }}>
         <DayShape zones={shape.zones} modeSwitches={shape.modeSwitches} />
       </div>
+
+      {overruns.map((item) => (
+        <div key={item.id} style={{ marginTop: 12 }}>
+          <OverrunAsk taskId={item.id} overrunMinutes={item.overrunMinutes} />
+        </div>
+      ))}
 
       <Flags signals={signals} />
 

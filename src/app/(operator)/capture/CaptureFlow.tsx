@@ -4,6 +4,8 @@ import { useActionState, useState } from 'react';
 import { hmShort } from '@/lib/format';
 import { MODE_LABELS, PRIORITY_LABELS, type WorkMode } from '@/data/types';
 import { ClientName } from '@/components/marks';
+import { ReferenceClass } from '@/components/ReferenceClass';
+import type { Distribution } from '@/engines/estimates/referenceClass';
 import type { DraftItem } from '@/data/capture';
 import {
   confirmDraftAction, discardDraftAction, parseCaptureAction, saveItemAction,
@@ -103,6 +105,7 @@ function Review({ state, clients }: { state: CaptureState; clients: Client[] }) 
           total={items.length}
           draftId={draftId}
           clients={clients}
+          reference={state.references?.[index]}
           onPatch={(changes) => patch(index, changes)}
         />
       ))}
@@ -132,12 +135,13 @@ function Review({ state, clients }: { state: CaptureState; clients: Client[] }) 
   );
 }
 
-function ItemCard({ item, index, total, draftId, clients, onPatch }: {
+function ItemCard({ item, index, total, draftId, clients, reference, onPatch }: {
   item: DraftItem;
   index: number;
   total: number;
   draftId: string;
   clients: Client[];
+  reference?: Distribution;
   onPatch: (changes: Partial<DraftItem>) => void;
 }) {
   const uncertain = item.confidence !== null && item.confidence < LOW_CONFIDENCE;
@@ -204,7 +208,17 @@ function ItemCard({ item, index, total, draftId, clients, onPatch }: {
       </Field>
 
       <Field label="How long will it take?">
+        {reference && <ReferenceClass distribution={reference} />}
         <div className="chips">
+          {reference?.status === 'ready' && (
+            <button
+              type="button"
+              className={`choice${item.estMinutes === reference.median ? ' choice--on' : ''}`}
+              onClick={() => save({ estMinutes: reference.median })}
+            >
+              Use median {hmShort(reference.median)}
+            </button>
+          )}
           {ESTIMATE_CHOICES.map((m) => (
             <button
               key={m}
@@ -216,6 +230,31 @@ function ItemCard({ item, index, total, draftId, clients, onPatch }: {
             </button>
           ))}
         </div>
+        {reference?.status === 'ready'
+          && item.estMinutes !== null
+          && item.estMinutes < reference.median && (
+          <div style={{ marginTop: 8 }}>
+            <label className="label" htmlFor={`faster-${index}`}>
+              What makes this one faster?
+            </label>
+            <input
+              id={`faster-${index}`}
+              className="input"
+              defaultValue={item.belowMedianReason ?? ''}
+              placeholder="Reusing last month's layout"
+              onBlur={(e) => save({ belowMedianReason: e.target.value.trim() || null })}
+            />
+            <p className="tiny dim" style={{ marginTop: 4 }}>
+              You are estimating below what work like this has actually taken. One line is enough.
+            </p>
+          </div>
+        )}
+        {item.estMinutes !== null && item.estMinutes > 180 && (
+          <p className="tiny" style={{ marginTop: 8, color: 'var(--amber-deep)' }}>
+            Over three hours in one piece. Splitting it into parts usually estimates better and
+            schedules better — you can do that from the work item once it is added.
+          </p>
+        )}
       </Field>
 
       <Field label="Priority — your call">

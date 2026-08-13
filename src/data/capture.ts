@@ -30,6 +30,8 @@ export type DraftItem = {
   isInternal: boolean;
   /** The parser's own honesty about each field, 0-1. Below 0.7 is flagged. */
   confidence: number | null;
+  /** Required when estimating below what similar work has actually taken. */
+  belowMedianReason?: string | null;
   /** Set when the parser matched an existing item, so we link not duplicate. */
   duplicateOfId?: string | null;
 };
@@ -111,6 +113,7 @@ export async function confirmDraft(db: SupabaseClient, id: string): Promise<stri
       priority: item.priority,
       estMinutes: item.estMinutes ?? 60,
       internalTarget: item.internalTarget,
+      estimateReason: item.belowMedianReason ?? null,
       mode: item.mode ?? 'operational',
       // Internal work is never client-visible, whatever the toggle said.
       clientVisible: item.isInternal ? false : item.clientVisible,
