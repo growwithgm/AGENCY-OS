@@ -740,10 +740,19 @@ comment on view client_visible_work is
 -- 11. Seed
 -- ───────────────────────────────────────────────────────────────────
 
--- Working hours: Monday to Friday, 09:00–17:00, with a realistic daily
--- cap of 6h 30m. Change these on the Availability screen.
+-- Working hours and the realistic daily cap, Monday to Friday.
+--
+-- The zones below say WHEN work happens and of what kind; this says how
+-- much of that a person can actually deliver. The seeded zones open
+-- 10h 30m of window, and 6h 30m of it is a realistic day — the cap is
+-- shared between the zones in proportion to their length, so the evening
+-- keeps its share rather than losing it to a long morning.
+--
+-- Change both on the Settings screen. They are meant to agree with each
+-- other: a cap far below the zones squeezes every zone, and a cap above
+-- them does nothing at all.
 insert into capacity_rules (weekday, start_time, end_time, max_minutes)
-select w, '09:00'::time, '17:00'::time, 390
+select w, '09:00'::time, '00:30'::time, 390
 from generate_series(1, 5) as w
 where not exists (select 1 from capacity_rules);
 
