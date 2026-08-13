@@ -5,6 +5,7 @@ import { requireOperator } from '@/lib/auth';
 import { completeWork, getWork, pushWork, updateWork } from '@/data/work';
 import { refreshSignals } from '@/data/attention';
 import { logActivity } from '@/data/activity';
+import { recordAudit } from '@/lib/audit';
 import type { WorkMode, WorkStatus } from '@/data/types';
 import { MODE_LABELS } from '@/data/types';
 
@@ -387,4 +388,60 @@ export async function bulkCompleteAction(form: FormData) {
   revalidatePath('/work');
   revalidatePath('/');
   revalidatePath('/week');
+}
+
+/**
+ * Move work to a different client.
+ *
+ * Reassigning is not a field edit: if the work was visible, it disappears
+ * from one client's portal and appears in another's. Both clients are
+ * named in the confirmation and both are recorded, so the change can be
+ * explained afterwards.
+ */
+export async function reassignClientAction(form: FormData) {
+  const { session, supabase } = await requireOperator();
+  const id = requireId(form);
+  const newClientId = value(form, 'client_id');
+  const confirmed = form.get('confirm') === 'yes';
+
+  if (!newClientId) throw new Error('a client is required');
+  if (!confirmed) throw new Error('reassigning needs an explicit confirmation');
+
+  const before = await getWork(supabase, id);
+  if (!before) throw new Error('work item not found');
+  if (before.client_id === newClientId) return;
+
+  const [{ data: from }, { data: to }] = await Promise.all([
+    supabase.from('clients').select('name').eq('id', before.client_id).maybeSingle(),
+    supabase.from('clients').select('name').eq('id', newClientId).maybeSingle(),
+  ]);
+
+  await supabase.from('tasks').update({ client_id: newClientId }).eq('id', id);
+
+  await logActivity({
+    actor: 'operator',
+    action: 'work.reassigned',
+    entityType: 'tasks',
+    entityId: id,
+    before: { client_id: before.client_id, client_name: from?.name ?? null },
+    after: { client_id: newClientId, client_name: to?.name ?? null },
+    instruction: before.client_visible
+      ? `visible work moved from ${from?.name ?? 'unknown'} to ${to?.name ?? 'unknown'}`
+      : undefined,
+  });
+
+  await recordAudit({
+    type: 'work_pushed',
+    subjectTable: 'tasks',
+    subjectId: id,
+    actor: session.email,
+    before: { client: from?.name ?? null },
+    after: { client: to?.name ?? null },
+    note: 'client reassigned',
+  });
+
+  await refreshSignals(supabase);
+  await refreshWorkViews(id);
+  revalidatePath(`/clients/${before.client_id}`);
+  revalidatePath(`/clients/${newClientId}`);
 }

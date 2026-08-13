@@ -17,7 +17,8 @@ export type AIJobName =
   | 'daily_brief'
   | 'ask_advice'
   | 'draft_client_update'
-  | 'estimate_insight';
+  | 'estimate_insight'
+  | 'assistant';
 
 export type AIJobConfig = {
   model: AIModel;
@@ -46,6 +47,11 @@ export const AI_JOBS: Record<AIJobName, AIJobConfig> = {
 
   // Reading a small table of ratios.
   estimate_insight:       { model: 'kimi-k2.5',               maxTokens: 600 },
+
+  // The tool loop: chooses actions and reads their results back. Higher
+  // effort than a narration job because a wrong tool call costs real work,
+  // and generous tokens because a turn may carry several tool results.
+  assistant:              { model: 'kimi-k3', effort: 'high', maxTokens: 2000 },
 };
 
 export function jobConfig(name: AIJobName): AIJobConfig {

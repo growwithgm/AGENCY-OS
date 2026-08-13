@@ -88,3 +88,59 @@ export async function runAI<T = string>(opts: RunAIOpts): Promise<{ result: T; r
     throw e;
   }
 }
+
+export type ToolDefinition = {
+  type: 'function';
+  function: { name: string; description: string; parameters: object };
+};
+
+export type RunAIToolsOpts = Omit<RunAIOpts, 'schema'> & { tools: ToolDefinition[] };
+
+/**
+ * One round of a tool-calling conversation.
+ *
+ * The caller owns the loop: it executes whatever tool calls come back,
+ * appends the results, and calls again. Keeping the loop outside this
+ * function is deliberate — execution must go through the registry's fence,
+ * and a provider wrapper is the wrong place to decide what may run.
+ *
+ * The assistant message is returned whole, because Kimi requires the
+ * entire message (reasoning included) to be sent back on the next turn.
+ */
+export async function runAITools(opts: RunAIToolsOpts): Promise<{
+  message: OpenAI.Chat.ChatCompletionMessage;
+  toolCalls: { id: string; name: string; args: Record<string, unknown> }[];
+}> {
+  const t0 = Date.now();
+  try {
+    const res = await client().chat.completions.create({
+      model: opts.model,
+      ...(opts.model === 'kimi-k3' ? { reasoning_effort: opts.effort ?? 'low' } : {}),
+      max_completion_tokens: opts.maxTokens,
+      messages: [{ role: 'system', content: opts.system }, ...opts.messages],
+      tools: opts.tools,
+      tool_choice: 'auto',
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+
+    const message = res.choices[0].message;
+    await logRun({ kind: opts.kind, model: opts.model, usage: res.usage, ms: Date.now() - t0, ok: true });
+
+    const toolCalls = (message.tool_calls ?? []).flatMap((call) => {
+      if (call.type !== 'function') return [];
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}') as Record<string, unknown>;
+      } catch {
+        // Malformed arguments are a refusal, not a crash — the loop reports
+        // it back to the model as a failed call.
+      }
+      return [{ id: call.id, name: call.function.name, args }];
+    });
+
+    return { message, toolCalls };
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    await logRun({ kind: opts.kind, model: opts.model, ms: Date.now() - t0, ok: false, error: err });
+    throw e;
+  }
+}

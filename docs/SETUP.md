@@ -187,14 +187,21 @@ infer, one question at a time. Priority is always asked, never guessed.
 
 ## 6. Cron
 
-Two jobs, authenticated with the `x-cron-secret` header. `vercel.json`
+Four jobs, authenticated with the `x-cron-secret` header. `vercel.json`
 already declares them for Vercel; for an external scheduler
 (cron-job.org and similar), point it at:
 
-| URL | When (your local time) |
-|---|---|
-| `https://your-app.vercel.app/api/cron/nightly` | 02:00 |
-| `https://your-app.vercel.app/api/cron/morning` | 08:30 |
+| URL | When (your local time) | What it does |
+|---|---|---|
+| `https://your-app.vercel.app/api/cron/nightly` | 02:00 | Generates recurring work, re-plans, refreshes attention signals |
+| `https://your-app.vercel.app/api/cron/morning` | 08:30 | Sends the morning attention notification, if anything needs you |
+| `https://your-app.vercel.app/api/cron/windows` | 09:00, 13:00, 18:00 | Delivers whatever was held for a delivery window |
+| `https://your-app.vercel.app/api/cron/digest` | Friday 16:00 | One weekly email per client that wants one |
+
+The windows job is the one that makes notifications bearable: anything not
+urgent waits for the next window and arrives as a single message, and
+nothing at all is delivered during a peak zone. Calling it more often than
+the three windows is harmless — it only acts on what is actually due.
 
 Send the secret as a header, not in the URL — schedulers keep URLs in
 their logs. `/api/cron/ping` verifies the secret without doing any work,

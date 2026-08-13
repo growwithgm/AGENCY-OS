@@ -11,10 +11,11 @@ import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { effortFor, estimateHistoryFor, getWork, referenceClassFor } from '@/data/work';
 import { ReferenceClass } from '@/components/ReferenceClass';
-import { getClient } from '@/data/clients';
+import { getClient, listClients } from '@/data/clients';
 import { listActivity, type ActivityEntry } from '@/data/activity';
 import { hm, hmSigned, relativePhrase, shortDate } from '@/lib/format';
 import { ClientName, ModeChip, PriorityMark, StatusChip } from '@/components/marks';
+import { Reassign } from './Reassign';
 import { MODE_LABELS, PRIORITY_LABELS, STATUS_LABELS } from '@/data/types';
 import type { WorkMode, WorkStatus } from '@/data/types';
 import {
@@ -36,12 +37,13 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
   const work = await getWork(supabase, id);
   if (!work) notFound();
 
-  const [client, history, effort, activity, reference] = await Promise.all([
+  const [client, history, effort, activity, reference, allClients] = await Promise.all([
     getClient(supabase, work.client_id),
     estimateHistoryFor(supabase, id),
     effortFor(supabase, id),
     listActivity(supabase, { limit: 200 }),
     referenceClassFor(supabase, work.title, work.mode ?? 'operational'),
+    listClients(supabase),
   ]);
 
   const unrecordedSessions = effort.filter((e) => e.minutes === null).length;
@@ -285,6 +287,14 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
           </p>
           <div><button type="submit" className="btn btn--sm">Save wording</button></div>
         </form>
+
+        <Reassign
+          workId={work.id}
+          currentClientId={work.client_id}
+          currentClientName={client?.name ?? null}
+          clientVisible={work.client_visible}
+          clients={allClients.map((c) => ({ id: c.id, name: c.name, colorIndex: c.color_index }))}
+        />
 
         <form action={setVisibilityAction} className="spread">
           <input type="hidden" name="work_id" value={work.id} />

@@ -3,6 +3,8 @@
   "framework": "nextjs",
   "crons": [
     { "path": "/api/cron/nightly", "schedule": "0 21 * * *" },
-    { "path": "/api/cron/morning", "schedule": "30 3 * * *" }
+    { "path": "/api/cron/morning", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/windows", "schedule": "0 4,8,13 * * *" },
+    { "path": "/api/cron/digest", "schedule": "0 11 * * 5" }
   ]
 }

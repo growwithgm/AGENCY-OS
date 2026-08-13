@@ -136,20 +136,30 @@ export async function continueRequest(
 }
 
 async function notifyOperator(requestId: string): Promise<void> {
-  const { sendPush } = await import('@/push/send');
+  const { notify } = await import('@/push/queue');
 
   const { data } = await supabaseAdmin().from('client_requests')
     .select('draft, raw_input, clients(name)')
     .eq('id', requestId)
     .maybeSingle();
 
+  const draft = data?.draft as { title?: string; requested_date?: string | null } | null;
   const clientName = (data?.clients as unknown as { name: string } | null)?.name ?? 'A client';
-  const title = (data?.draft as { title?: string } | null)?.title ?? data?.raw_input?.slice(0, 60) ?? 'New request';
+  const title = draft?.title ?? data?.raw_input?.slice(0, 60) ?? 'New request';
 
-  await sendPush('client_request', {
-    title: `${clientName} asked for work`,
-    body: title,
-    url: '/inbox',
-    tag: 'client-request',
+  // A request naming a date inside 48 hours is a decision that expires, so
+  // it breaks through the windows. Everything else waits its turn.
+  const requested = draft?.requested_date ? Date.parse(`${draft.requested_date}T23:59:59`) : null;
+  const soon = requested !== null && requested - Date.now() < 48 * 3600_000;
+
+  await notify({
+    kind: 'client_request',
+    urgency: soon ? 'urgent' : 'routine',
+    payload: {
+      title: `${clientName} asked for work`,
+      body: soon ? `${title} — they named a date inside 48 hours.` : title,
+      url: '/requests',
+      tag: 'client-request',
+    },
   });
 }
