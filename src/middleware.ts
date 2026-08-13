@@ -109,7 +109,7 @@ function notConfigured(request: NextRequest, missing: string[]) {
     `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ledger — not configured</title>
+<title>Agency OS — not configured</title>
 <style>
   body{margin:0;background:#F1F1EE;color:#15161A;font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
   main{max-width:560px;margin:0 auto;padding:64px 24px}
@@ -121,7 +121,7 @@ function notConfigured(request: NextRequest, missing: string[]) {
   .note{border-left:3px solid #B2400B;padding-left:14px;margin-top:24px}
 </style></head>
 <body><main>
-  <h1>Ledger is not configured yet</h1>
+  <h1>Agency OS is not configured yet</h1>
   <p>The deployment is missing these environment variables:</p>
   <ul>${items}</ul>
   <p>Add them in your hosting provider&rsquo;s environment settings — on Vercel that is
@@ -149,7 +149,7 @@ function serverProblem(request: NextRequest, error: unknown) {
     `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ledger — temporarily unavailable</title>
+<title>Agency OS — temporarily unavailable</title>
 <style>
   body{margin:0;background:#F1F1EE;color:#15161A;font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
   main{max-width:560px;margin:0 auto;padding:64px 24px}

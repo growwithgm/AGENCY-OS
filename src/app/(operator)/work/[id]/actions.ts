@@ -30,7 +30,7 @@ async function refreshWorkViews(id: string) {
   revalidatePath(`/work/${id}`);
   revalidatePath('/work');
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
 }
 
 export async function updateWorkAction(form: FormData) {
@@ -362,7 +362,7 @@ export async function bulkPushAction(form: FormData) {
   await refreshSignals(supabase);
   revalidatePath('/work');
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
 }
 
 /** Bulk completion has no minutes field, so every item lands with no actual
@@ -387,7 +387,7 @@ export async function bulkCompleteAction(form: FormData) {
   await refreshSignals(supabase);
   revalidatePath('/work');
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
 }
 
 /**

@@ -19,7 +19,7 @@ const handler = createMcpHandler(
   {
     serverInfo: { name: 'ledger', version: '1.0.0' },
     instructions:
-      'Ledger — a capacity-aware work operating system for one operator. '
+      'Agency OS — capacity-aware work management for a solo agency operator. '
       + 'It answers whether promised work fits before its deadlines. '
       + 'You can read the plan and park captures in the Inbox for review. '
       + 'You cannot set priority, confirm work, approve client requests or '

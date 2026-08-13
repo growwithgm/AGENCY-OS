@@ -29,7 +29,7 @@ export async function completeWorkAction(form: FormData) {
   await refreshSignals(supabase);
 
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
   revalidatePath(`/work/${id}`);
 }
 
@@ -58,7 +58,7 @@ export async function pushWorkAction(form: FormData) {
   await refreshSignals(supabase);
 
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
   revalidatePath(`/work/${id}`);
 }
 
@@ -77,5 +77,5 @@ export async function replanAction() {
   await replan(supabase);
   await refreshSignals(supabase);
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
 }

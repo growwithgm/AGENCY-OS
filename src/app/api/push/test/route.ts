@@ -8,9 +8,9 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const result = await sendPush('test', {
-    title: 'Ledger',
+    title: 'Agency OS',
     body: 'Notifications are working on this device.',
-    url: '/availability',
+    url: '/settings',
     tag: 'ledger-test',
   }, { ignoreSettings: true });
 

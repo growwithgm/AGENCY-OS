@@ -12,47 +12,42 @@ Supabase dashboard → **SQL Editor** → New query → paste the whole of
 That one file is everything: tables, functions, row level security, the
 portal projections and the seed data.
 
-It works on a fresh project and on a database that already has the older
-schema in it — existing tables get their missing columns added, the old
-single `due_at` is carried across into `internal_target`, and no data is
-dropped. It is idempotent, so re-running it later is safe.
-
-> The old date becomes an **internal target, never a commitment**. Those
-> rows never recorded whether a date was a promise, and inventing promises
-> is exactly what the commitment field exists to prevent. Promote the real
-> ones yourself from each work item's page.
+It works on a fresh project and on a database that already has an older
+schema in it — existing tables get their missing columns added and no data
+is dropped. It is idempotent, so re-running it later is safe.
 
 Check it worked: **Table Editor** should now list `clients`, `tasks`,
-`client_contacts`, `attention_signals` and the rest.
+`day_zones`, `client_contacts`, `app_users` and the rest.
 
 ---
 
 ## 2. Turn on sign-in
 
-The two sides sign in differently, on purpose:
-
-- **You** (the agency side) sign in with **email and password** — the
-  Supabase Auth user itself, exactly like signing in to Supabase. No email
-  in the loop.
-- **Clients** sign in with an emailed link. Nothing to remember, nothing to
-  reset, and access can be revoked instantly by removing the address.
-
-**Create your own user** — Supabase dashboard → **Authentication → Users →
-Add user**: enter the address you will put in `OPERATOR_EMAIL` and choose a
-password. That password is your sign-in; change it any time from the same
-place. (If the user already exists without a password, delete it and add it
-again with one.)
+Both sides sign in the same way: **email and password**, against the
+Supabase Auth user itself. No magic links anywhere.
 
 **Authentication → Providers → Email**
 
 | Setting | Value | Why |
 |---|---|---|
-| Enable Email provider | **On** | Both passwords and links live under this provider |
-| Confirm email | On | Default; harmless — users are created pre-confirmed |
-| Enable email signups | **Off** | Nobody may create their own account. The app creates users with the service-role key, only for the operator address and addresses you have added as client contacts. |
+| Enable Email provider | **On** | Passwords live under this provider |
+| Confirm email | On | Default; harmless — every user is created pre-confirmed |
+| Enable email signups | **Off** | Nobody may create their own account. You create the operator user; the app creates client logins with the service-role key. |
 
-**Authentication → URL Configuration** — only needed for the client portal.
-If you are the only one signing in, skip it.
+**Create your own user** — Supabase dashboard → **Authentication → Users →
+Add user**: the address you will put in `OPERATOR_EMAIL`, and a password.
+That password is your sign-in, and you change it from the same place.
+
+Or run the bootstrap script once, which does the same thing and stamps the
+owner claim at the same time:
+
+```bash
+OPERATOR_EMAIL=you@example.com OPERATOR_PASSWORD='choose-something-long' \
+NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+node scripts/create-operator.mjs
+```
+
+**Authentication → URL Configuration** — only needed for password resets.
 
 | Setting | Value |
 |---|---|
@@ -62,11 +57,10 @@ If you are the only one signing in, skip it.
 Add `http://localhost:3000/auth/callback` as a second redirect URL while
 you are developing.
 
-> **Supabase's built-in email sender is rate limited** (a handful of
-> messages an hour) and is meant for testing. Before giving the portal to
-> clients, add your own SMTP under **Authentication → Emails → SMTP
-> Settings** — otherwise a client asking for a second link may simply not
-> receive one. This does not affect your own sign-in.
+> **Supabase's built-in email sender is rate limited** and is meant for
+> testing. It is only used for "Forgot password?", so this rarely matters —
+> but if you want reliable resets, add your own SMTP under
+> **Authentication → Emails → SMTP Settings**.
 
 ---
 
@@ -79,22 +73,24 @@ On Vercel: **Project → Settings → Environment Variables**. Locally: copy
 
 | Variable | Where it comes from |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → **API** → Project URL. Looks like `https://abcdefgh.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → **API** → Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page → **anon public** key. Safe in a browser; that is what it is for. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Same page → **service_role** key. Bypasses all security — server only, never in a `NEXT_PUBLIC_` variable, never in the browser. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same page → **service_role** key. Bypasses all security — server only, never in a `NEXT_PUBLIC_` variable. |
 | `OPERATOR_EMAIL` | Your own email address. This single address is the agency side. |
 | `CRON_SECRET` | Invent one: `openssl rand -base64 32` |
 | `MCP_SECRET` | Invent one: `openssl rand -base64 32` |
 
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are accepted as alternative names
-for the first two, so an older deployment does not need renaming.
+for the first two.
 
 ### Optional — the feature switches off, the app keeps working
 
 | Variable | Missing means |
 |---|---|
-| `MOONSHOT_API_KEY` | Every AI job uses its deterministic fallback |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No push notifications. Generate with `npx web-push generate-vapid-keys`; `VAPID_SUBJECT` is `mailto:you@example.com` |
+| `MOONSHOT_API_KEY` | Every AI job uses its deterministic fallback, and the assistant becomes a button panel |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No push notifications. Generate with `npx web-push generate-vapid-keys` |
+| `RESEND_API_KEY`, `RESEND_FROM` | No weekly client digests. Settings says so rather than pretending. |
+| `TRANSCRIPTION_URL`, `TRANSCRIPTION_KEY` | The microphone button is hidden. Groq's whisper-large-v3. |
 | `APP_URL` | Falls back to the Vercel deployment URL. `APP_BASE_URL` is accepted as the older name. |
 
 ### After adding them, redeploy
@@ -104,9 +100,9 @@ to a running deployment do not reach it until you redeploy.
 
 ### Checking what is missing
 
-Visit `/api/health` on the deployment. It lists the names of missing
-variables — never their values — and works even when nothing else does,
-which is exactly when you need it:
+Visit `/api/health`. It lists the names of missing variables — never their
+values — and works even when nothing else does, which is exactly when you
+need it:
 
 ```json
 { "ok": false, "missing_required": ["OPERATOR_EMAIL"], "features_off": [] }
@@ -115,45 +111,31 @@ which is exactly when you need it:
 If a variable is missing, every page shows a plain list of what to add
 rather than a platform error.
 
-`OPERATOR_EMAIL` is enforced when the link is requested, not merely hidden
-afterwards: any other address gets the same "check your email" screen and
-no email is sent. Changing it later immediately locks out the old address,
-because the allowlist is re-checked on every request, not only at sign-in.
-
 ---
 
-## 4. Sign in to the agency side
+## 4. Sign in
 
-1. Deploy, or run `npm run dev`.
-2. Go to `/login`.
-3. Enter the email and password of your Supabase user — the one you created
-   in step 2, whose address is `OPERATOR_EMAIL`.
+Go to `/login` and enter the email and password of your Supabase user.
 
 You stay signed in on that device; the session refreshes itself in the
-background, so this is a one-time cost per browser, not a daily one.
+background, so this is a one-time cost per browser.
 
 **The password lives in Supabase, not in this app.** The app never stores
-or learns it — Supabase verifies it, the same check as signing in to
-Supabase itself. Change it from the dashboard (Authentication → Users →
-your user) and the old one stops working.
+or learns it. Change it from the dashboard and the old one stops working.
 
 What the app does add, on each successful sign-in, is the `role: owner`
 claim in `app_metadata` — writable only by the service-role key, which is
-why a user you created by hand works without any extra clicking. That claim
-is what row level security reads, so the role cannot be forged by the user
-it describes. Only the `OPERATOR_EMAIL` address gets it; any other user
-signing in here is rejected before the password is even checked.
+why a user you created by hand works with no extra clicking. That claim is
+what row level security reads, so the role cannot be forged by the user it
+describes. Only the `OPERATOR_EMAIL` address gets it.
 
 If sign-in fails:
 
 | Symptom | Cause |
 |---|---|
-| "That email or password is not right" | The pair does not match the Supabase user — or the email is not `OPERATOR_EMAIL`, which gets the same answer on purpose. If the user was created without a password, delete it in the dashboard and add it again with one. |
+| "Email or password is incorrect" | The pair does not match the Supabase user — or the email is not `OPERATOR_EMAIL`, which gets the same answer on purpose. If the user was created without a password, delete it and add it again with one. |
 | "Too many attempts" | Ten wrong guesses in fifteen minutes from one place. Wait it out. |
 | Every page says "not configured" | Variables were added after the last build. Redeploy, then check `/api/health`. |
-
-Client sign-in needs no password: they enter their email at
-`/portal/login` and open the link.
 
 ---
 
@@ -161,64 +143,75 @@ Client sign-in needs no password: they enter their email at
 
 In this order, because each step depends on the last:
 
-**a. Availability** (`/availability`) — set your working hours and the daily
-cap for each day. The cap is what you can realistically deliver inside
-those hours, not the length of the window; the planner treats it as the
-truth and never plans beyond it. Everything the product says about capacity
-rests on this number being honest.
+**a. Your day** (`/settings`) — the zones: which hours exist and what kind
+of work each admits. This is the most load-bearing setting in the product;
+the scheduler obeys it exactly and the assistant is not allowed to change
+it. Set the working hours and the daily cap in the same screen. The cap is
+what you can realistically deliver inside those hours, not the length of
+the window.
 
-**b. Clients** (`/clients`) — add your client brands.
+**b. Clients** (`/clients`) — add your brands. Each gets a colour mark it
+keeps everywhere, and a language for their portal.
 
-**c. Portal access** — open a client, and under **Portal access** add the
-email addresses of people at that client. That list is the entire
-allowlist: an address that is not on it gets the same "check your email"
-screen and no link. Adding an address sends nothing; they sign in at
-`/portal/login` whenever they choose. Revoking removes their access
-immediately, including any session already open.
+**c. Logins** — open a client → **Portal access** → Create login. You get a
+generated password shown exactly once; hand it over however you like. They
+can change it at `/portal/account`. Reset, disable and remove are on the
+same row. Removing ends any session already open.
 
-**d. Recurrence** (optional, `/availability`) — rules for repeating work.
-Approving a rule once authorises every occurrence it generates.
+**d. Recurring work** (`/settings`) — rules for repeating work. Approving a
+rule once authorises every occurrence it generates.
 
-**e. Capture some work** (`/capture`) — type or dictate a sentence. The
+**e. Capture something** (`/capture`) — type or dictate a sentence. The
 system commits to an interpretation and asks only for what it cannot
-infer, one question at a time. Priority is always asked, never guessed.
+infer. It never guesses the client, and never guesses the priority.
 
 ---
 
 ## 6. Cron
 
 Four jobs, authenticated with the `x-cron-secret` header. `vercel.json`
-already declares them for Vercel; for an external scheduler
-(cron-job.org and similar), point it at:
+already declares them for Vercel; for an external scheduler (cron-job.org
+and similar), point it at:
 
 | URL | When (your local time) | What it does |
 |---|---|---|
-| `https://your-app.vercel.app/api/cron/nightly` | 02:00 | Generates recurring work, re-plans, refreshes attention signals |
-| `https://your-app.vercel.app/api/cron/morning` | 08:30 | Sends the morning attention notification, if anything needs you |
-| `https://your-app.vercel.app/api/cron/windows` | 09:00, 13:00, 18:00 | Delivers whatever was held for a delivery window |
-| `https://your-app.vercel.app/api/cron/digest` | Friday 16:00 | One weekly email per client that wants one |
+| `/api/cron/nightly` | 02:00 | Generates recurring work, re-plans, refreshes attention signals |
+| `/api/cron/morning` | 08:30 | Sends the morning attention notification, if anything needs you |
+| `/api/cron/windows` | 09:00, 13:00, 18:00 | Delivers whatever was held for a delivery window |
+| `/api/cron/digest` | Friday 16:00 | One weekly email per client that wants one |
 
-The windows job is the one that makes notifications bearable: anything not
-urgent waits for the next window and arrives as a single message, and
-nothing at all is delivered during a peak zone. Calling it more often than
-the three windows is harmless — it only acts on what is actually due.
+Send the secret as a header, not in the URL — schedulers keep URLs in their
+logs. `/api/cron/ping` verifies the secret without doing any work, so test
+a new job against that first.
 
-Send the secret as a header, not in the URL — schedulers keep URLs in
-their logs. `/api/cron/ping` verifies the secret without doing any work,
-so test a new job against that first.
+The windows job is what makes notifications bearable: anything not urgent
+waits for the next window and arrives as a single message, and nothing at
+all is delivered during a peak zone. Calling it more often than the three
+windows is harmless — it only acts on what is due.
 
 ---
 
 ## 7. Check it privately before trusting it
 
-Two things are worth verifying yourself rather than taking on faith:
+Three things are worth verifying yourself rather than taking on faith.
 
-**Client isolation.** Add two dummy clients with two email addresses you
-control, give each some visible work, and sign in as each in turn. Neither
-should see the other's work, and neither should see an internal date, an
-estimate or a priority anywhere.
+**Client isolation.** Run it against your own database:
+
+```bash
+psql -d <your-db> -f scripts/verify-portal-isolation.sql
+```
+
+It signs in as a client and checks that the base tables return nothing,
+that the internal fields are not columns of the portal views at all, that
+another client's work and unpublished drafts are unreachable, and that a
+request cannot be filed against someone else. It rolls back, so it changes
+nothing.
 
 **Working without AI.** Remove `MOONSHOT_API_KEY` and restart. Capture,
-client intake, the daily brief, advice and client updates all still work —
-they fall back to deterministic paths and say so on screen where it
-matters.
+client intake, the daily brief, the assistant and client updates all still
+work — they fall back to deterministic paths and say so on screen.
+
+**The zones you actually keep.** Open Today after a week. If the shape of
+the day on screen is not the shape of your real day, change the zones
+rather than working around them — everything the product says about
+capacity rests on them being true.

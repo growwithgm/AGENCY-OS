@@ -52,3 +52,21 @@ all have deterministic paths. Every AI job has a fallback.
 **INV-12 — History is preserved.** Original estimates, original commitments
 and actuals are never overwritten. Revisions append to `estimate_history`;
 published updates are immutable and corrections create a new version.
+
+**INV-13 — The assistant cannot reach a fenced action.**
+Actions that touch a client, set a priority, destroy work or redefine the day
+are never placed in the tool list the model is given. They exist only as
+proposal builders whose output is a panel the operator taps. No phrasing,
+standing instruction or setting creates a path from model output to one of
+them. `src/assistant/registry.test.ts` asserts this.
+
+**INV-14 — A client sees no internal figure, ever.**
+Estimates, safe estimates, internal targets, priorities, modes and slip counts
+are not columns of the portal projections at all — row filtering can be worked
+around by a clever query, a missing column cannot.
+`scripts/verify-portal-isolation.sql` proves it against a real database.
+
+**INV-15 — Nothing is delivered during peak.**
+Notifications wait for a delivery window and arrive combined; during a peak
+zone nothing is delivered at all, urgent included. It waits for the zone to
+end.

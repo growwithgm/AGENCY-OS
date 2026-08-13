@@ -58,7 +58,7 @@ export async function requireOperator(): Promise<{ session: OperatorSession; sup
 /** Client gate for portal pages and actions (INV-8). */
 export async function requireClient(): Promise<{ session: ClientSession; supabase: SupabaseClient }> {
   const session = await currentSession();
-  if (!session || session.role !== 'client') redirect('/portal/login');
+  if (!session || session.role !== 'client') redirect('/login');
   return { session, supabase: await supabaseServer() };
 }
 

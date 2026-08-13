@@ -124,7 +124,7 @@ export async function approveRequestAction(_prev: ApproveState, form: FormData):
   await refreshSignals(supabase);
   revalidatePath('/requests');
   revalidatePath('/requests/[id]', 'page');
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
   revalidatePath('/');
 
   redirect(`/work/${workId}`);
@@ -144,7 +144,7 @@ export async function declineRequestAction(form: FormData): Promise<void> {
   await refreshSignals(supabase);
   revalidatePath('/requests');
   revalidatePath('/requests/[id]', 'page');
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
 }
 
 /** One question, handed back to the client. They answer, it returns here. */
@@ -161,5 +161,5 @@ export async function askOneMoreQuestionAction(form: FormData): Promise<void> {
   await refreshSignals(supabase);
   revalidatePath('/requests');
   revalidatePath('/requests/[id]', 'page');
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
 }

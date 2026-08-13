@@ -1,12 +1,12 @@
 {
-  "name": "Ledger",
-  "short_name": "Ledger",
-  "description": "A capacity-aware work operating system",
+  "name": "Agency OS",
+  "short_name": "Agency OS",
+  "description": "Capacity-aware work management for solo agencies",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F1F1EE",
-  "theme_color": "#F1F1EE",
+  "background_color": "#e9edf0",
+  "theme_color": "#e9edf0",
   "orientation": "portrait-primary",
   "icons": [
     {

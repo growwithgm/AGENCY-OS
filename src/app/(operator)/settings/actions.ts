@@ -25,7 +25,7 @@ async function replanAndRevalidate(supabase: SupabaseClient) {
   await refreshSignals(supabase);
   revalidatePath('/settings');
   revalidatePath('/');
-  revalidatePath('/week');
+  revalidatePath('/work');
 }
 
 function readModes(form: FormData): WorkMode[] {

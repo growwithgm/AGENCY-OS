@@ -95,7 +95,7 @@ export default async function RequestsPage() {
           <div className="eyebrow">From your clients</div>
           <h1 className="page-title">Requests</h1>
         </div>
-        <a href="/inbox" className="btn btn--sm">Inbox</a>
+        
       </div>
 
       <div className="flag flag--info">

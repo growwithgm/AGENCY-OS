@@ -49,7 +49,7 @@ export async function parseCaptureAction(
     parsedBy: parsed.source,
   });
 
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
 
   // The evidence is fetched before the estimate is asked for, because the
   // first number a person reaches for is the one they anchor on.
@@ -106,7 +106,7 @@ export async function saveItemAction(form: FormData): Promise<void> {
   items[index] = item;
   await updateDraftItems(supabase, draftId, items, draft.missing_fields);
   revalidatePath('/capture');
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
 }
 
 export async function confirmDraftAction(form: FormData): Promise<void> {
@@ -116,12 +116,12 @@ export async function confirmDraftAction(form: FormData): Promise<void> {
   await confirmDraft(supabase, draftId);
 
   revalidatePath('/');
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
   redirect('/');
 }
 
 export async function discardDraftAction(form: FormData): Promise<void> {
   const { supabase } = await requireOperator();
   await discardDraft(supabase, String(form.get('draft_id') ?? ''));
-  revalidatePath('/inbox');
+  revalidatePath('/requests');
 }

@@ -1,123 +1,90 @@
-# Ledger
+# Agency OS
 
-A capacity-aware work operating system for one person running a small
-e-commerce marketing agency alone.
+Capacity-aware work management for one person running a small agency.
 
-Most task apps answer *what tasks exist*. This one answers:
+The problem it solves is not "what do I have to do" — a list does that. It
+is "can I actually do this, and what breaks if I say yes". Everything here
+follows from taking that question seriously.
 
-> **Can the work I have promised physically fit before its deadlines?**
+## What it does
 
-Everything else is in service of that question. The operator finds out he is
-over-committed while there is still time to act.
+**Capture** turns a sentence into structured work. It commits to an
+interpretation and asks only for what it genuinely cannot infer. Two things
+are never guessed: the client, because putting work on the wrong portal is
+worse than one extra tap, and the priority, because priority is what the
+scheduler orders everything by.
 
-- Rules the system will not break: [`docs/INVARIANTS.md`](docs/INVARIANTS.md)
-- Visual contract: [`docs/design-reference.html`](docs/design-reference.html)
+**The scheduler** treats a day as a sequence of named zones rather than a
+bucket of minutes. Operations in the morning, Admin after lunch, Peak at
+night for creative and technical work. Work goes only where its kind is
+admitted, never below the minimum unbroken block for that kind, and deep
+work is placed whole or not at all. Same inputs, same plan, every time —
+there is no scoring and nothing to tune.
 
-## Stack
+**Three dates**, kept apart on purpose:
 
-Next.js (App Router) · Supabase (Postgres, Auth, RLS) · Vercel · Kimi via
-`runAI()`. One product, one database, one deployment.
-
-## Layout
-
-| Path | What it is |
-|---|---|
-| `src/engines/planner/` | The planning engine: slots, ordering, placement, at-risk, carry-forward |
-| `src/engines/attention/` | Deterministic detection of conditions worth interrupting for |
-| `src/engines/estimates/` | Estimate statistics — arithmetic, not a model |
-| `src/data/` | Everything between the database and the engines |
-| `src/ai/` | `runAI()`, job config, prompts, and each job with its fallback |
-| `src/lib/` | Auth, Supabase clients, secrets, rate limiting, audit, formatting |
-| `src/portal/` | Client request intake and the policy that guards it |
-| `src/app/(operator)/` | Today, Capture, Inbox, Clients, Assistant, Work, Week, Availability |
-| `src/app/portal/` | Client login, home, request form |
-| `supabase/migrations/` | Schema, RLS, the three date fields |
-
-## Setup
-
-Full instructions, including the Supabase dashboard settings:
-[`docs/SETUP.md`](docs/SETUP.md).
-
-The short version:
-
-1. Paste [`supabase/schema.sql`](supabase/schema.sql) into the Supabase SQL
-   editor and run it. That one file is the whole database — tables, RLS,
-   portal projections and seed data — and it is idempotent.
-2. Turn on the Email provider, turn **off** email signups, and add
-   `/auth/callback` to the redirect URLs.
-3. `cp .env.example .env.local`, fill it in, `npm install && npm run dev`.
-4. Sign in at `/login` with the address in `OPERATOR_EMAIL`.
-5. Set your hours on `/availability`, add clients on `/clients`, and give
-   their people portal access from each client's page.
-
-`supabase/migrations/` holds the same schema as an ordered migration
-history, for an existing database that already has data in it. A fresh
-project only needs `schema.sql`.
-
-Two cron jobs, authenticated with `x-cron-secret`: `/api/cron/nightly`
-(02:00) generates recurring work, re-plans and refreshes signals;
-`/api/cron/morning` (08:30) pushes attention signals, but only when any are
-worth pushing. `/api/cron/ping` proves the secret works without doing
-anything.
-
-## Authentication
-
-Supabase Auth, magic links, no passwords anywhere. Two identities, both
-through RLS.
-
-**Operator** — one allowlisted address. The role lives in the JWT's
-`app_metadata`, which only the service-role key can write, so it cannot be
-forged by the user it describes. Middleware protects every route, and every
-server action re-checks the session because a server action is reachable by
-direct POST.
-
-**Client** — an address in `client_contacts`. The session carries
-`client_id`; the portal reads through RLS and never touches the
-service-role key. An unknown address gets the same "check your email"
-screen as a known one.
-
-The service-role key is used in exactly three places: cron, the MCP
-endpoint, and the auth handshake, which has to look up identities before a
-session exists.
-
-## The three dates
-
-The distinction is load-bearing and is never collapsed:
-
-| Field | Meaning | Client sees it? |
+| | what it means | who sees it |
 |---|---|---|
-| `client_requested_date` | What the client asked for | As their own request |
-| `internal_target` | When the operator intends to do it | Never |
-| `committed_date` | What the operator actually promised | Only when explicitly marked |
+| `client_requested_date` | what the client asked for | not a promise |
+| `internal_target` | when you intend to do it | you only |
+| `committed_date` | what you actually promised | the client |
 
-Work appearing under Thursday in the plan does not make the portal say
-"delivery Thursday". Carry-forward moves `internal_target` and increments
-`slid_count`; `committed_date` is untouched by any automatic process.
+Commitments are tested against a *safe* estimate — the likely one padded by
+how much that kind of work has genuinely overrun — because a promise that
+only holds if nothing goes wrong is not a plan.
 
-## Working without AI
+**The client portal** reads as a letter, not a dashboard. It shows
+client-facing titles and status, in the client's own language, and a date
+only where a commitment exists. Where there is no commitment there is no
+date at all: silence is honest, "soon" is a promise nobody made.
 
-Disable `MOONSHOT_API_KEY` and everything still works:
+**The assistant** can do things, within a fence. Anything affecting only
+you it does directly and reports, with 30 seconds to undo. Anything that
+reaches a client, or sets a priority, it can only *propose* — those tools
+do not exist in the list the model is given, so no phrasing can reach one.
 
-| Job | Fallback |
-|---|---|
-| `parse_capture` | The sentence becomes one draft item; client matched by name if it appears |
-| `clarify_client_request` | A fixed three-question intake |
-| `daily_brief` | The attention signals and figures, stated in order |
-| `ask_advice` | The computed figures behind the question, without commentary |
-| `draft_client_update` | A structured list of what actually happened |
-| `estimate_insight` | The statistics sentence the engine already produced |
+**The weekly review** is arithmetic: commitments met and missed, hours by
+kind of work and by client, context switches per day, peak hours used
+against available, estimate accuracy, and what keeps moving.
 
-Nothing about capture, requests, planning, Today, the portal or approvals
-depends on the provider being up.
-
-## Tests
+## Running it
 
 ```bash
-npm test        # 127 tests: engines, policies, invariants, fallbacks
+npm install
+cp .env.example .env.local     # fill in Supabase and OPERATOR_EMAIL
+npm run dev
+```
+
+Database and sign-in setup: **[docs/SETUP.md](docs/SETUP.md)**.
+The rules the code will not break: **[docs/INVARIANTS.md](docs/INVARIANTS.md)**.
+What the system is and why: **[docs/BLUEPRINT.md](docs/BLUEPRINT.md)**.
+
+```bash
+npm test          # 200 tests, no network, no database
 npm run typecheck
 npm run build
 ```
 
-The invariant tests in `src/data/invariants.test.ts` assert the rules from
-`docs/INVARIANTS.md` directly, so breaking one fails the build rather than
-production.
+Two checks worth running against a real database:
+
+```bash
+psql -d <db> -f supabase/schema.sql                    # idempotent, safe to re-run
+psql -d <db> -f scripts/verify-portal-isolation.sql    # proves a client sees only their own
+```
+
+## What it deliberately is not
+
+No Kanban, no Gantt, no percentage-complete, no automatic priority scoring,
+no client chat, no invoicing, no CRM, no imported metrics, no analytics
+dashboards, no theme picker, no i18n framework, no vector database.
+
+External services, all optional except the first: Supabase (database and
+auth), Kimi (the AI jobs — every one has a deterministic fallback), Groq
+(voice input), Resend (client digests), Web Push. None of them is a source
+of business data.
+
+## Stack
+
+Next.js 15 App Router, React 19, TypeScript, Supabase (Postgres + Auth +
+RLS), Vitest. Deployed on Vercel; cron runs either from `vercel.json` or an
+external scheduler.
