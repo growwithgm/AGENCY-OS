@@ -80,7 +80,7 @@ export async function clientSummaries(db: SupabaseClient): Promise<ClientSummary
 
 export async function clientContacts(db: SupabaseClient, clientId: string) {
   const { data } = await db.from('client_contacts')
-    .select('id, email, name, active, last_login_at')
+    .select('id, email, name, active, last_login_at, auth_user_id')
     .eq('client_id', clientId)
     .order('email');
   return data ?? [];

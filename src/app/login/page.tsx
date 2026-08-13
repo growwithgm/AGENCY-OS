@@ -1,6 +1,6 @@
 import { currentSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { PasswordForm } from './PasswordForm';
+import { SignInForm } from './SignInForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +23,10 @@ export default async function LoginPage({
 
   return (
     <main className="screen" style={{ maxWidth: 400, paddingTop: 80 }}>
-      <div className="eyebrow">Ledger</div>
+      <div className="eyebrow">Agency OS</div>
       <h1 className="page-title" style={{ marginTop: 8 }}>Sign in</h1>
       <p className="muted" style={{ marginTop: 8, marginBottom: 24 }}>
-        Enter your email and password. You stay signed in on this device.
+        Capacity-aware work management for solo agencies.
       </p>
 
       {error && ERRORS[error] && (
@@ -35,11 +35,7 @@ export default async function LoginPage({
         </p>
       )}
 
-      <PasswordForm />
-
-      <p className="tiny dim" style={{ marginTop: 28 }}>
-        Client of the agency? <a href="/portal/login">Use the client portal</a>.
-      </p>
+      <SignInForm />
     </main>
   );
 }

@@ -1,15 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
-import { markContactLogin } from '@/lib/authFlow';
 
 /**
- * Magic-link landing. Exchanges the code for a session cookie, then sends
- * the caller to the surface their role belongs to — never to a page they
- * would only bounce off.
+ * Recovery-link landing (the "Forgot password?" email). Exchanges the code
+ * for a session, then continues to the change-password form. Sign-in itself
+ * never passes through here any more — that is a plain password check.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get('code');
+  const next = searchParams.get('next') ?? '/account/password';
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=link_invalid`);
@@ -22,18 +22,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=link_expired`);
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const role = (user?.app_metadata as { role?: string } | undefined)?.role;
-
-  if (role === 'owner') return NextResponse.redirect(`${origin}/`);
-
-  if (role === 'client') {
-    if (user?.email) await markContactLogin(user.email);
-    return NextResponse.redirect(`${origin}/portal`);
-  }
-
-  // A session with no usable role: sign it out rather than leaving a
-  // half-authenticated cookie behind.
-  await supabase.auth.signOut();
-  return NextResponse.redirect(`${origin}/login?error=no_access`);
+  // Only ever continue to our own change-password form.
+  const safeNext = next.startsWith('/account') ? next : '/account/password';
+  return NextResponse.redirect(`${origin}${safeNext}`);
 }

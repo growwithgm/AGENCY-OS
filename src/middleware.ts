@@ -66,11 +66,20 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // The change-password form is for whichever role the recovery link
+  // signed in — it needs a session, not a particular side.
+  if (pathname === '/account/password' || pathname.startsWith('/account/password/')) {
+    if (role !== 'owner' && role !== 'client') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return response;
+  }
+
   const isPortalRoute = pathname === PORTAL_PREFIX || pathname.startsWith(`${PORTAL_PREFIX}/`);
 
   if (isPortalRoute) {
     if (role !== 'client') {
-      return NextResponse.redirect(new URL('/portal/login', request.url));
+      return NextResponse.redirect(new URL('/login', request.url));
     }
     return response;
   }

@@ -20,7 +20,12 @@ export type AuditEventType =
   | 'estimate_revised'
   | 'recurrence_changed'
   | 'signin'
-  | 'signin_rejected';
+  | 'signin_rejected'
+  | 'password_changed'
+  | 'login_created'
+  | 'login_disabled'
+  | 'login_enabled'
+  | 'login_removed';
 
 export async function recordAudit(input: {
   type: AuditEventType;

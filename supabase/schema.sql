@@ -82,10 +82,26 @@ create table if not exists client_contacts (
   name          text,
   active        boolean not null default true,
   last_login_at timestamptz,
+  auth_user_id  uuid,
   created_at    timestamptz not null default now()
 );
 
 create index if not exists client_contacts_client_idx on client_contacts (client_id);
+
+alter table client_contacts add column if not exists auth_user_id uuid;
+
+-- Who is who. auth.users is the identity store; this maps identity → role
+-- so every login is visible and manageable from the dashboard. The JWT
+-- claim (app_metadata) remains what RLS reads — this is bookkeeping, not
+-- the security boundary.
+create table if not exists app_users (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  role       text not null check (role in ('operator','client')),
+  client_id  uuid references clients(id) on delete cascade,
+  full_name  text,
+  created_at timestamptz not null default now(),
+  constraint client_needs_client_id check (role = 'operator' or client_id is not null)
+);
 
 -- Reconcile a clients table that predates this file.
 alter table clients add column if not exists contact_email  text;
@@ -547,6 +563,7 @@ begin
     'effort_records','estimate_history','audit_events','attention_signals',
     'client_updates','capture_drafts','client_requests','push_subscriptions',
     'notification_settings','notification_log','ai_runs','rate_limit_events',
+    'app_users',
     -- retained from the previous build; nothing writes to these today
     'ai_cache','jobs'
   ]
@@ -565,6 +582,9 @@ begin
     );
   end loop;
 end $$;
+
+-- A signed-in user may always see their own role row.
+create policy self_read on app_users for select using (auth.uid() = user_id);
 
 -- ───────────────────────────────────────────────────────────────────
 -- 10. Portal projections
