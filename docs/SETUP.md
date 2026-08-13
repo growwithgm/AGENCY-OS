@@ -169,9 +169,11 @@ infer. It never guesses the client, and never guesses the priority.
 
 ## 6. Cron
 
-Five jobs, authenticated with the `x-cron-secret` header. `vercel.json`
-already declares them for Vercel; for an external scheduler (cron-job.org
-and similar), point it at:
+Five jobs, authenticated with the `x-cron-secret` header, all run from an
+**external scheduler** (cron-job.org and similar). `vercel.json` deliberately
+declares **no** crons: the windows job runs three times a day, and Vercel's
+Hobby plan allows only one cron run per day, which blocks the deploy. Point
+your scheduler at:
 
 | URL | When (your local time) | What it does |
 |---|---|---|
