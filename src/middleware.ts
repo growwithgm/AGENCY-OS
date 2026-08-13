@@ -66,6 +66,15 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Server-action POSTs carry a Next-Action header and expect an action
+  // result or an RSC redirect back — never an HTML login page. Redirecting
+  // one here is what crashed the client router when a session expired
+  // mid-form. Let it reach the action: every action re-checks the session
+  // (INV-9) and calls redirect() itself, which Next serialises correctly.
+  if (request.method === 'POST' && request.headers.has('next-action')) {
+    return response;
+  }
+
   // The change-password form is for whichever role the recovery link
   // signed in — it needs a session, not a particular side.
   if (pathname === '/account/password' || pathname.startsWith('/account/password/')) {

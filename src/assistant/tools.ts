@@ -235,24 +235,31 @@ export async function runTool(
     };
   }
 
-  switch (name) {
-    case 'can_i_do_this_now': return canIDoThisNow(ctx, String(args.work_id ?? ''));
-    case 'when_can_i_do': return whenCanIDo(ctx, args.mode as WorkMode, Number(args.minutes ?? 0));
-    case 'propose_placement': return proposePlacement(ctx, String(args.work_id ?? ''), String(args.target_date ?? ''));
-    case 'propose_reshuffle': return proposeReshuffle(ctx, (args.work_ids as string[]) ?? [], Number(args.defer_days ?? 1));
-    case 'what_if': return whatIf(ctx, args);
-    case 'search': return search(ctx, String(args.query ?? ''));
-    case 'get_briefing': return briefing(ctx);
-    case 'list_activity': return activity(ctx, Number(args.limit ?? 20));
-    case 'update_task': return updateTask(ctx, args);
-    case 'complete_task': return completeTask(ctx, args);
-    case 'move_task': return moveTask(ctx, String(args.work_id ?? ''), String(args.target_date ?? ''));
-    case 'block_task': return blockTask(ctx, String(args.work_id ?? ''), String(args.reason ?? ''));
-    case 'unblock_task': return setStatus(ctx, String(args.work_id ?? ''), 'backlog');
-    case 'start_timer': return startTimer(ctx, String(args.work_id ?? ''));
-    case 'navigate': return { ok: true, data: { navigate: String(args.path ?? '/') } };
-    default:
-      return { ok: false, refused: `${name} is not implemented yet.` };
+  // A tool that throws — a dropped database connection mid-turn, say —
+  // becomes a refusal, not an exception. One failed tool must not abort the
+  // whole turn and lose the steps that already ran before it.
+  try {
+    switch (name) {
+      case 'can_i_do_this_now': return await canIDoThisNow(ctx, String(args.work_id ?? ''));
+      case 'when_can_i_do': return await whenCanIDo(ctx, args.mode as WorkMode, Number(args.minutes ?? 0));
+      case 'propose_placement': return await proposePlacement(ctx, String(args.work_id ?? ''), String(args.target_date ?? ''));
+      case 'propose_reshuffle': return await proposeReshuffle(ctx, (args.work_ids as string[]) ?? [], Number(args.defer_days ?? 1));
+      case 'what_if': return await whatIf(ctx, args);
+      case 'search': return await search(ctx, String(args.query ?? ''));
+      case 'get_briefing': return await briefing(ctx);
+      case 'list_activity': return await activity(ctx, Number(args.limit ?? 20));
+      case 'update_task': return await updateTask(ctx, args);
+      case 'complete_task': return await completeTask(ctx, args);
+      case 'move_task': return await moveTask(ctx, String(args.work_id ?? ''), String(args.target_date ?? ''));
+      case 'block_task': return await blockTask(ctx, String(args.work_id ?? ''), String(args.reason ?? ''));
+      case 'unblock_task': return await setStatus(ctx, String(args.work_id ?? ''), 'backlog');
+      case 'start_timer': return await startTimer(ctx, String(args.work_id ?? ''));
+      case 'navigate': return { ok: true, data: { navigate: String(args.path ?? '/') } };
+      default:
+        return { ok: false, refused: `${name} is not implemented yet.` };
+    }
+  } catch {
+    return { ok: false, refused: `Something went wrong running ${name}; I stopped rather than guess.` };
   }
 }
 

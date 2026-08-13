@@ -83,22 +83,29 @@ export async function weeklyReview(db: SupabaseClient, now = new Date()): Promis
   const clients = clientsRes.data ?? [];
 
   // Commitments: a promise is met if it was finished on or before the day.
+  // Everything below keys on task id, never title — two jobs can share a
+  // title, and matching on it would credit or blame the wrong one.
   const promised = completed.filter((w) => w.committed_date);
-  const missedItems = promised
-    .filter((w) => dateKey(new Date(w.completed_at)) > w.committed_date!)
-    .map((w) => ({ title: w.title, client: w.clients?.name ?? null, date: w.committed_date! }));
+  const missedById = new Map<string, { title: string; client: string | null; date: string }>();
+  for (const w of promised) {
+    if (dateKey(new Date(w.completed_at)) > w.committed_date!) {
+      missedById.set(w.id, { title: w.title, client: w.clients?.name ?? null, date: w.committed_date! });
+    }
+  }
+  const lateCompletions = missedById.size;
 
   // At-risk commitments that have not been finished at all are misses too.
   const planResult = plan(await loadPlanInputs(db, now));
   for (const risk of planResult.atRisk) {
     if (!risk.task.committed_date) continue;
-    if (missedItems.some((m) => m.title === risk.task.title)) continue;
-    missedItems.push({
+    if (missedById.has(risk.task.id)) continue;
+    missedById.set(risk.task.id, {
       title: risk.task.title,
       client: clients.find((c) => c.id === risk.task.client_id)?.name ?? null,
       date: risk.task.committed_date,
     });
   }
+  const missedItems = [...missedById.values()];
 
   type Block = {
     starts_at: string; ends_at: string; zone: string | null;
@@ -169,7 +176,10 @@ export async function weeklyReview(db: SupabaseClient, now = new Date()): Promis
     from: dateKey(from),
     to: dateKey(now),
     commitments: {
-      met: promised.length - missedItems.filter((m) => promised.some((p) => p.title === m.title)).length,
+      // Met = promised-and-completed, minus those completed late. An at-risk
+      // commitment that was never finished is not in `promised`, so it adds
+      // to `missed` without ever subtracting from `met`.
+      met: promised.length - lateCompletions,
       missed: missedItems.length,
       missedItems,
     },
