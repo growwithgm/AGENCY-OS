@@ -14,7 +14,7 @@ import { todayKey } from '@/lib/format';
 import type { DraftItem } from '@/data/capture';
 import type { WorkMode } from '@/data/types';
 
-const schema = {
+export const parseCaptureSchema = {
   type: 'object',
   additionalProperties: false,
   required: ['items'],
@@ -24,7 +24,14 @@ const schema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['title', 'client_id', 'client_hint', 'est_minutes', 'internal_target', 'work_type', 'detail'],
+        // Strict mode forbids any field not listed here, so mode,
+        // client_title and confidence must appear — without them the model
+        // physically cannot return a mode, and every capture came back
+        // 'operational' no matter what the work was.
+        required: [
+          'title', 'client_id', 'client_hint', 'est_minutes', 'internal_target',
+          'work_type', 'detail', 'mode', 'client_title', 'confidence',
+        ],
         properties: {
           title: { type: 'string' },
           client_id: { type: ['string', 'null'] },
@@ -33,6 +40,9 @@ const schema = {
           internal_target: { type: ['string', 'null'] },
           work_type: { type: ['string', 'null'] },
           detail: { type: ['string', 'null'] },
+          mode: { type: 'string', enum: ['creative', 'technical', 'analytical', 'operational'] },
+          client_title: { type: ['string', 'null'] },
+          confidence: { type: ['number', 'null'] },
         },
       },
     },
@@ -118,10 +128,11 @@ export async function parseCapture(
           + `Captured text:\n${rawInput}`,
       }],
       maxTokens: cfg.maxTokens,
-      schema,
+      schema: parseCaptureSchema,
     });
 
     const known = new Set(clients.map((c) => c.id));
+    const MODES = new Set<WorkMode>(['creative', 'technical', 'analytical', 'operational']);
     const items: DraftItem[] = (result.items ?? []).map((item) => ({
       title: item.title,
       // Never trust an id the model invented.
@@ -132,7 +143,9 @@ export async function parseCapture(
       internalTarget: item.internal_target,
       workType: item.work_type,
       detail: item.detail,
-      mode: item.mode ?? 'operational',
+      // The schema enum makes this one of the four, but a malformed response
+      // should still land somewhere sensible rather than an invalid mode.
+      mode: item.mode && MODES.has(item.mode) ? item.mode : 'operational',
       clientTitle: item.client_title ?? item.title,
       clientVisible: true,
       isInternal: false,

@@ -38,6 +38,24 @@ const EN = {
     rejected: 'Not going ahead',
     expired: 'Closed',
   } as Record<string, string>)[state] ?? 'With us',
+  request: {
+    close: 'Close',
+    stepOf: (i: number, n: number) => `${i} of ${n}`,
+    prompt: 'What do you need?',
+    promptHint: 'Tell us in your own words. We’ll ask a couple of short questions after this.',
+    placeholder: 'We want to start selling to salons, not just direct customers.',
+    answerLabel: 'Your answer',
+    send: 'Send',
+    continue: 'Continue',
+    sending: 'Sending…',
+    received: 'Received',
+    receivedBody:
+      'Received — this will be reviewed. Nothing is scheduled until the agency confirms what '
+      + 'they can take on and when.',
+    backToPage: 'Back to your page',
+    notCommitment:
+      'This is a request, not a commitment. The agency will confirm what they can take on and when.',
+  },
 };
 
 const ES: typeof EN = {
@@ -69,6 +87,24 @@ const ES: typeof EN = {
     rejected: 'No seguimos adelante',
     expired: 'Cerrado',
   } as Record<string, string>)[state] ?? 'Con nosotros',
+  request: {
+    close: 'Cerrar',
+    stepOf: (i: number, n: number) => `${i} de ${n}`,
+    prompt: '¿Qué necesitas?',
+    promptHint: 'Cuéntanoslo con tus palabras. Después te haremos un par de preguntas breves.',
+    placeholder: 'Queremos empezar a vender a salones, no solo a clientes directos.',
+    answerLabel: 'Tu respuesta',
+    send: 'Enviar',
+    continue: 'Continuar',
+    sending: 'Enviando…',
+    received: 'Recibido',
+    receivedBody:
+      'Recibido — lo revisaremos. No se programa nada hasta que la agencia confirme qué '
+      + 'puede asumir y cuándo.',
+    backToPage: 'Volver a tu página',
+    notCommitment:
+      'Esto es una solicitud, no un compromiso. La agencia confirmará qué puede asumir y cuándo.',
+  },
 };
 
 export function t(locale: Locale) {

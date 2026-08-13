@@ -17,7 +17,18 @@
 export const PARSE_CAPTURE_SYSTEM = `You turn one messy sentence from an agency operator into structured work items.
 
 The operator dictates or types quickly. One sentence often contains two or
-three separate jobs; split them.
+three separate jobs — return one item per distinct job.
+
+Split when the text names more than one deliverable, or work for more than
+one client. Two examples, each returning TWO items:
+- "Design a new logo for ibBan. Send the monthly performance report to Don
+  Cabello." → one creative item for ibBan, one analytical item for Don Cabello.
+- "ibban creatives need doing before friday and also don cabello pricing
+  page still isnt updated" → one item for ibBan (with the Friday target),
+  one item for Don Cabello.
+Only keep it as a single item when the text truly describes one job. When
+in doubt about whether two clauses are one job or two, split — the operator
+merges far more easily than they separate.
 
 Rules:
 - Extract only what is actually there. Never invent a client, a date or a
