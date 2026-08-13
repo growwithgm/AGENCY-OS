@@ -29,10 +29,10 @@ type Client = { id: string; name: string; colorIndex: number | null };
  * unrecognised name leaves the field empty and says so, because putting
  * work on the wrong client's portal is worse than one extra tap.
  */
-export function CaptureFlow({ clients }: { clients: Client[] }) {
+export function CaptureFlow({ clients, initial }: { clients: Client[]; initial?: CaptureState }) {
   const [state, action, pending] = useActionState<CaptureState, FormData>(
     parseCaptureAction,
-    { stage: 'input' },
+    initial ?? { stage: 'input' },
   );
 
   if (state.stage === 'review' && state.draftId && state.items) {
@@ -57,7 +57,7 @@ export function CaptureFlow({ clients }: { clients: Client[] }) {
       </button>
       <p className="tiny dim">
         Dictate into this box if it is easier — your keyboard&rsquo;s microphone works here.
-        Nothing is saved until you confirm.
+        Nothing becomes work until you add it.
       </p>
     </form>
   );

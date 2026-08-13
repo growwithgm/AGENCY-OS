@@ -104,8 +104,8 @@ export function SignInForm() {
       <button
         type="button"
         onClick={() => setMode('forgot')}
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-        className="small dim"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', alignSelf: 'flex-start' }}
+        className="small dim tap-link"
       >
         Forgot password?
       </button>

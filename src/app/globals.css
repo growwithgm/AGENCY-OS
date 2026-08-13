@@ -31,7 +31,9 @@
   /* grounds */
   --ground-op: #e9edf0;
   --ground-nav: #f3f6f8;
-  --ground-portal: #f7f8fa;
+  /* Warm sand, not cool near-white: the portal should feel unmistakably
+     different from the operator's cool cockpit the instant it loads. */
+  --ground-portal: #f4f0e6;
 
   /* the one loud colour */
   --red: #c2321b;
@@ -337,8 +339,45 @@ a:hover { color: var(--blue-deep); text-decoration: underline; }
   text-decoration: none;
 }
 .fab:hover { text-decoration: none; color: #fff; }
+.fab { position: fixed; }
+.fab__count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-mono-stack);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ground-op);
+}
 @media (max-width: 899.5px) {
   .fab { right: 16px; bottom: calc(74px + env(safe-area-inset-bottom)); }
+}
+
+/* Clamp a block of text to N lines — stops a 5000-character capture from
+   rendering as one enormous card. Opening the item shows all of it. */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A quiet text link that is still a full-height tap target. */
+.tap-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 2px;
 }
 
 /* ───────────────────────── cards & rows ───────────────────────── */

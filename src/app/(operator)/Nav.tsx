@@ -21,8 +21,8 @@ const NAV = [
 /** Mobile keeps the five most-travelled destinations; the rest live in Settings. */
 const MOBILE = ['/', '/work', '/requests', '/clients', '/assistant'];
 
-export function Nav({ badgeCount, operatorEmail, dateShort }: {
-  badgeCount: number;
+export function Nav({ requestCount, operatorEmail, dateShort }: {
+  requestCount: number;
   operatorEmail: string;
   dateShort: string;
 }) {
@@ -40,7 +40,7 @@ export function Nav({ badgeCount, operatorEmail, dateShort }: {
         {NAV.map((item) => (
           <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
             <span><span className="nav-ico">{item.icon}</span>{item.label}</span>
-            {item.badged && badgeCount > 0 && <span className="nav-badge">{badgeCount}</span>}
+            {item.badged && requestCount > 0 && <span className="nav-badge">{requestCount}</span>}
           </a>
         ))}
         <div className="sidebar__foot">
@@ -61,7 +61,7 @@ export function Nav({ badgeCount, operatorEmail, dateShort }: {
           <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
             <span className="nav-ico">{item.icon}</span>
             <span>{item.short}</span>
-            {item.badged && badgeCount > 0 && <span className="tabbar__badge">{badgeCount}</span>}
+            {item.badged && requestCount > 0 && <span className="tabbar__badge">{requestCount}</span>}
           </a>
         ))}
       </nav>

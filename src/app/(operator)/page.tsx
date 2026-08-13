@@ -11,6 +11,7 @@
 import { requireOperator } from '@/lib/auth';
 import { plan } from '@/engines/planner/plan';
 import { loadPlanInputs, todayView } from '@/data/planning';
+import { listClients } from '@/data/clients';
 import { openSignals } from '@/data/attention';
 import { unexplainedOverruns } from '@/data/work';
 import { dayShape } from '@/data/zones';
@@ -28,13 +29,20 @@ export default async function TodayPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, planInput, shape, overruns] = await Promise.all([
+  const [view, signals, planInput, shape, overruns, clients] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     loadPlanInputs(supabase, now),
     dayShape(supabase, now),
     unexplainedOverruns(supabase),
+    listClients(supabase),
   ]);
+
+  // Every client, not only those with work planned today — an overflow item
+  // belongs to a client whether or not the plan found room for it, and
+  // rendering it as "Internal" (the no-client label) is a lie about whose
+  // work it is.
+  const clientLookup = new Map(clients.map((c) => [c.id, { name: c.name, colorIndex: c.color_index }]));
 
   // At-risk is recomputed from the same engine the plan came from, so the
   // two can never disagree on screen.
@@ -71,8 +79,6 @@ export default async function TodayPage() {
   const over = overflowMinutes > 0;
 
   const running = view.items.find((i) => i.task.status === 'in_progress');
-
-  const clientNames = new Map(view.items.map((i) => [i.task.client_id, i.clientName]));
 
   return (
     <main className="screen">
@@ -154,8 +160,8 @@ export default async function TodayPage() {
               item={{
                 id: risk.task.id,
                 title: risk.task.title,
-                clientName: clientNames.get(risk.task.client_id) ?? null,
-                colorIndex: null,
+                clientName: clientLookup.get(risk.task.client_id)?.name ?? null,
+                colorIndex: clientLookup.get(risk.task.client_id)?.colorIndex ?? null,
                 status: risk.task.status,
                 priority: risk.task.priority,
                 mode: risk.task.mode ?? 'operational',

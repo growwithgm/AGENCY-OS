@@ -116,12 +116,12 @@ export async function confirmDraftAction(form: FormData): Promise<void> {
   await confirmDraft(supabase, draftId);
 
   revalidatePath('/');
-  revalidatePath('/requests');
+  revalidatePath('/capture');
   redirect('/');
 }
 
 export async function discardDraftAction(form: FormData): Promise<void> {
   const { supabase } = await requireOperator();
   await discardDraft(supabase, String(form.get('draft_id') ?? ''));
-  revalidatePath('/requests');
+  revalidatePath('/capture');
 }

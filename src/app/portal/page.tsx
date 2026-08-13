@@ -169,10 +169,10 @@ export default async function PortalHome() {
         )}
       </section>
 
-      <footer style={{ paddingTop: 20, borderTop: '1px solid var(--portal-line)', fontSize: 12, color: 'var(--portal-mut)' }}>
-        <a href="/portal/account">{say.account}</a>
-        {' · '}
-        <a href="/portal/signout">{say.signOut}</a>
+      <footer style={{ paddingTop: 20, borderTop: '1px solid var(--portal-line)', fontSize: 13, color: 'var(--portal-mut)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <a href="/portal/account" className="tap-link">{say.account}</a>
+        <span aria-hidden>·</span>
+        <a href="/portal/signout" className="tap-link">{say.signOut}</a>
       </footer>
     </main>
   );
