@@ -17,6 +17,8 @@ import type { UpdateEvidence } from '@/data/updates';
 
 export type UpdateFacts = {
   clientName: string;
+  /** The client's own language. The update is written in it. */
+  locale?: 'en' | 'es';
   periodStart: string;
   periodEnd: string;
   completed: { task_id: string; title: string; completed_at: string | null }[];
@@ -84,7 +86,7 @@ export async function draftClientUpdate(facts: UpdateFacts): Promise<UpdateDraft
       model: cfg.model,
       effort: cfg.effort,
       system: DRAFT_CLIENT_UPDATE_SYSTEM,
-      messages: [{ role: 'user', content: JSON.stringify(facts, null, 2) }],
+      messages: [{ role: 'user', content: JSON.stringify({ ...facts, locale: facts.locale ?? 'en' }, null, 2) }],
       maxTokens: cfg.maxTokens,
     });
     const body = (result ?? '').trim();

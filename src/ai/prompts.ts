@@ -122,7 +122,10 @@ Rules:
   commitment already made to this client.
 - Say plainly what is waiting on the client, if anything.
 - Warm but factual. No filler, no "excited to share", no "leveraging".
-- 90–150 words, plain prose, no headings, no bullet lists.`;
+- 90–150 words, plain prose, no headings, no bullet lists.
+- Write in the language given as \`locale\`: "en" for English, "es" for
+  Spanish. Write the whole update in that language, including the work
+  titles' surrounding prose — the titles themselves stay as supplied.`;
 
 export const ESTIMATE_INSIGHT_SYSTEM = `You narrate estimate accuracy statistics for an agency operator. You are
 given, per kind of work, the number of samples, the average estimate and the

@@ -1,8 +1,10 @@
 /**
- * Assistant — today's brief, then a question box.
+ * Assistant — today's figures, then a conversation about them.
  *
- * Every answer is grounded in facts the application computed first, and
- * every answer leads with the numbers. Nothing here applies itself.
+ * The chat can read the plan and change the operator's own work directly.
+ * Anything that reaches a client, or sets a priority, comes back as a panel
+ * to tap rather than something it did. Every number under an answer is
+ * rendered from what the tools returned, never from the prose.
  */
 
 import { requireOperator } from '@/lib/auth';
@@ -11,30 +13,29 @@ import { todayView } from '@/data/planning';
 import { pendingRequests } from '@/data/requests';
 import { pendingUpdates } from '@/data/updates';
 import { effortSamples } from '@/data/work';
+import { aiHealthy, transcriptionConfigured } from '@/data/aiHealth';
 import { allSuggestions } from '@/engines/estimates/learn';
 import { dailyBrief } from '@/ai/jobs/brief';
 import { hm } from '@/lib/format';
-import { AskBox } from './AskBox';
+import { AiHealthBanner } from '@/components/AiHealthBanner';
+import { Chat } from './Chat';
 
 export const dynamic = 'force-dynamic';
-
-const SAMPLE_QUESTIONS = [
-  'What should I cut this week?',
-  'Which client am I neglecting?',
-  'What slipped this month?',
-];
 
 export default async function AssistantPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, requests, updates, samples] = await Promise.all([
+  const [view, signals, requests, updates, samples, healthy] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     pendingRequests(supabase),
     pendingUpdates(supabase),
     effortSamples(supabase),
+    aiHealthy(supabase),
   ]);
+
+  const draftCount = updates.filter((u) => u.status === 'draft').length;
 
   const brief = await dailyBrief({
     date: view.date,
@@ -49,19 +50,24 @@ export default async function AssistantPage() {
     willNotFit: [],
     signals: signals.map((s) => ({ headline: s.headline, severity: s.severity })),
     pendingRequests: requests.length,
-    draftUpdates: updates.filter((u) => u.status === 'draft').length,
+    draftUpdates: draftCount,
   });
 
   const insight = allSuggestions(samples)[0] ?? null;
+
+  const runningItem = view.items.find((i) => i.task.status === 'in_progress');
+  const running = runningItem ? { id: runningItem.task.id, title: runningItem.task.title } : null;
 
   return (
     <main className="screen">
       <div className="head-row">
         <div>
-          <div className="eyebrow">Advisory only</div>
+          <div className="eyebrow">Reads everything, changes only your own work</div>
           <h1 className="page-title">Assistant</h1>
         </div>
       </div>
+
+      <AiHealthBanner healthy={healthy} />
 
       <section className="card">
         <div className="spread" style={{ marginBottom: 8 }}>
@@ -71,18 +77,26 @@ export default async function AssistantPage() {
         <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{brief.text}</p>
 
         <div className="row" style={{ gap: 8, marginTop: 12 }}>
-          <span className="tag">{hm(view.plannedMinutes)} planned</span>
-          <span className="tag">{hm(view.availableMinutes)} available</span>
-          {requests.length > 0 && <span className="tag tag--wait">{requests.length} requests</span>}
-          {updates.filter((u) => u.status === 'draft').length > 0 && (
-            <span className="tag tag--wait">
-              {updates.filter((u) => u.status === 'draft').length} drafts to approve
-            </span>
+          <span className="tag"><span className="num">{hm(view.plannedMinutes)}</span> planned</span>
+          <span className="tag"><span className="num">{hm(view.availableMinutes)}</span> available</span>
+          {requests.length > 0 && (
+            <span className="tag tag--wait"><span className="num">{requests.length}</span> requests</span>
+          )}
+          {draftCount > 0 && (
+            <span className="tag tag--wait"><span className="num">{draftCount}</span> drafts to approve</span>
           )}
         </div>
       </section>
 
-      <AskBox samples={SAMPLE_QUESTIONS} />
+      <div className="section-label"><span>Ask, or tell it what changed</span></div>
+      <p className="small muted" style={{ marginBottom: 10 }}>
+        It can answer questions about the plan, move your own work, start and finish things, and
+        show you what a change would cost before you make it. Priorities, committed dates and
+        anything a client sees come back as a panel for you to tap. Press ⌘K anywhere to open the
+        same thing in a smaller window.
+      </p>
+
+      <Chat transcription={transcriptionConfigured()} offline={!healthy} running={running} />
 
       {insight && (
         <>

@@ -33,6 +33,7 @@ export async function draftUpdateAction(form: FormData) {
 
   const draft = await draftClientUpdate({
     clientName: client.name,
+    locale: (client.locale as 'en' | 'es') ?? 'en',
     periodStart: dateKey(periodStart),
     periodEnd: dateKey(periodEnd),
     completed: visible

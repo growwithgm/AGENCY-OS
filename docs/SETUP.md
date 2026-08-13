@@ -169,7 +169,7 @@ infer. It never guesses the client, and never guesses the priority.
 
 ## 6. Cron
 
-Four jobs, authenticated with the `x-cron-secret` header. `vercel.json`
+Five jobs, authenticated with the `x-cron-secret` header. `vercel.json`
 already declares them for Vercel; for an external scheduler (cron-job.org
 and similar), point it at:
 
@@ -178,6 +178,7 @@ and similar), point it at:
 | `/api/cron/nightly` | 02:00 | Generates recurring work, re-plans, refreshes attention signals |
 | `/api/cron/morning` | 08:30 | Sends the morning attention notification, if anything needs you |
 | `/api/cron/windows` | 09:00, 13:00, 18:00 | Delivers whatever was held for a delivery window |
+| `/api/cron/weekly-updates` | Thursday 11:00 | Drafts one client update per client, for you to edit and publish |
 | `/api/cron/digest` | Friday 16:00 | One weekly email per client that wants one |
 
 Send the secret as a header, not in the URL — schedulers keep URLs in their

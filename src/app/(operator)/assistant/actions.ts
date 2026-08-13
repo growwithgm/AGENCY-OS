@@ -27,6 +27,7 @@ import type { Diff } from '@/assistant/diff';
 import type { ChatMessage } from '@/ai/runAI';
 import { getWork, updateWork, type UpdateWorkInput } from '@/data/work';
 import { logActivity } from '@/data/activity';
+import { listClients } from '@/data/clients';
 import { openSignals, refreshSignals } from '@/data/attention';
 import { PRIORITY_LABELS, type WorkMode } from '@/data/types';
 import { longDate } from '@/lib/format';
@@ -37,10 +38,23 @@ import { pendingRequests } from '@/data/requests';
 import { pendingUpdates } from '@/data/updates';
 import { askAdvice } from '@/ai/jobs/brief';
 
-export type TurnResult = AssistantTurn;
+/**
+ * A diff carries client names but not their identity colours, and a client
+ * is never a bare name on any screen — so the colours travel with the turn.
+ */
+export type ClientColors = Record<string, number>;
+
+export type TurnResult = AssistantTurn & { clientColors: ClientColors };
 
 /** Long enough to hold a conversation, short enough to stay affordable. */
 const MAX_HISTORY = 40;
+
+async function clientColors(db: Parameters<typeof listClients>[0]): Promise<ClientColors> {
+  const clients = await listClients(db);
+  const colors: ClientColors = {};
+  for (const client of clients) colors[client.name] = client.color_index ?? 0;
+  return colors;
+}
 
 /**
  * The history comes back from the browser, so it is treated as input rather
@@ -80,6 +94,7 @@ function offlineTurn(answer: string, history: ChatMessage[]): TurnResult {
     undo: [],
     transcript: history,
     degraded: true,
+    clientColors: {},
   };
 }
 
@@ -118,7 +133,7 @@ export async function sendMessageAction(
     revalidateWorkScreens();
   }
 
-  return turn;
+  return { ...turn, clientColors: await clientColors(supabase) };
 }
 
 /* ── Applying a fenced change ─────────────────────────────────────────── */
@@ -337,7 +352,7 @@ export type ReadOnlyRequest =
   | { tool: 'can_i_do_this_now'; workId: string }
   | { tool: 'when_can_i_do'; mode: WorkMode; minutes: number };
 
-export type ReadOnlyResult = { steps: Step[]; diffs: Diff[] };
+export type ReadOnlyResult = { steps: Step[]; diffs: Diff[]; clientColors: ClientColors };
 
 const MODES: WorkMode[] = ['creative', 'technical', 'analytical', 'operational'];
 
@@ -384,7 +399,7 @@ export async function readOnlyToolAction(request: ReadOnlyRequest): Promise<Read
       break;
   }
 
-  return { steps, diffs };
+  return { steps, diffs, clientColors: await clientColors(supabase) };
 }
 
 /* ── The advisory fallback, unchanged ─────────────────────────────────── */

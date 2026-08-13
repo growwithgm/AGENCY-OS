@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { requireOperator } from '@/lib/auth';
 import { openDrafts } from '@/data/capture';
 import { pendingRequests } from '@/data/requests';
+import { transcriptionConfigured } from '@/data/aiHealth';
 import { Nav } from './Nav';
+import { CommandK } from './CommandK';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +30,7 @@ export default async function OperatorLayout({ children }: { children: ReactNode
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {children}
         <a className="fab" href="/capture" aria-label="Capture work">+</a>
+        <CommandK transcription={transcriptionConfigured()} />
       </div>
     </div>
   );

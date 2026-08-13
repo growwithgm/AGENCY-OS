@@ -20,6 +20,17 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
+/**
+ * A diff knows a client's name but not the colour of its mark, so callers
+ * pass the map. Without it the name still carries a mark rather than
+ * appearing bare, which is the rule that matters.
+ */
+type ClientColors = Record<string, number>;
+
+function Client({ name, colors }: { name: string | null; colors?: ClientColors }) {
+  return <ClientName name={name} colorIndex={name ? colors?.[name] ?? null : null} />;
+}
+
 /** A slot as a person reads it: the day, the time it starts, the zone. */
 function Slot({ slot }: { slot: SlotRef }) {
   if (!slot) return <span className="dim num">—</span>;
@@ -32,12 +43,12 @@ function Slot({ slot }: { slot: SlotRef }) {
   );
 }
 
-function MoveRow({ move }: { move: DiffMove }) {
+function MoveRow({ move, colors }: { move: DiffMove; colors?: ClientColors }) {
   return (
     <div className="rows__row" style={{ display: 'block' }}>
       <div className="spread">
         <span>{move.title}</span>
-        <span className="small"><ClientName name={move.clientName} /></span>
+        <span className="small"><Client name={move.clientName} colors={colors} /></span>
       </div>
       <div className="small muted" style={{ marginTop: 4 }}>
         <Slot slot={move.from} />
@@ -78,12 +89,12 @@ function CapacityRow({ row }: { row: DiffCapacity }) {
   );
 }
 
-function CommitmentRow({ commitment }: { commitment: DiffCommitment }) {
+function CommitmentRow({ commitment, colors }: { commitment: DiffCommitment; colors?: ClientColors }) {
   return (
     <div className="rows__row" style={{ display: 'block' }}>
       <div className="spread">
         <span>{commitment.title}</span>
-        <span className="small"><ClientName name={commitment.clientName} /></span>
+        <span className="small"><Client name={commitment.clientName} colors={colors} /></span>
       </div>
       <p className="small" style={{ marginTop: 4 }}>
         {commitment.clientName
@@ -98,7 +109,11 @@ function CommitmentRow({ commitment }: { commitment: DiffCommitment }) {
  * `onApply` is a slot rather than a callback: applying a change is the
  * caller's business, and this component must never be able to perform one.
  */
-export function DiffPanel({ diff, onApply }: { diff: Diff; onApply?: ReactNode }) {
+export function DiffPanel({ diff, onApply, clientColors }: {
+  diff: Diff;
+  onApply?: ReactNode;
+  clientColors?: ClientColors;
+}) {
   const missed = diff.commitments.length;
 
   return (
@@ -123,7 +138,13 @@ export function DiffPanel({ diff, onApply }: { diff: Diff; onApply?: ReactNode }
         {diff.moving.length > 0 && <span className="num muted">{diff.moving.length}</span>}
       </div>
       {diff.moving.length > 0
-        ? <div className="rows">{diff.moving.map((move) => <MoveRow key={`moving-${move.taskId}`} move={move} />)}</div>
+        ? (
+          <div className="rows">
+            {diff.moving.map((move) => (
+              <MoveRow key={`moving-${move.taskId}`} move={move} colors={clientColors} />
+            ))}
+          </div>
+        )
         : <p className="small dim">Nothing you named changes its slot.</p>}
 
       {diff.nothingElseAffected ? (
@@ -137,7 +158,9 @@ export function DiffPanel({ diff, onApply }: { diff: Diff; onApply?: ReactNode }
                 <span className="num muted">{diff.knockOn.length}</span>
               </div>
               <div className="rows">
-                {diff.knockOn.map((move) => <MoveRow key={`knock-${move.taskId}`} move={move} />)}
+                {diff.knockOn.map((move) => (
+                  <MoveRow key={`knock-${move.taskId}`} move={move} colors={clientColors} />
+                ))}
               </div>
             </>
           )}
@@ -163,7 +186,11 @@ export function DiffPanel({ diff, onApply }: { diff: Diff; onApply?: ReactNode }
           <div className="eyebrow risk-text">⚠ Commitments affected</div>
           <div className="rows" style={{ marginTop: 4 }}>
             {diff.commitments.map((commitment) => (
-              <CommitmentRow key={`commit-${commitment.taskId}`} commitment={commitment} />
+              <CommitmentRow
+                key={`commit-${commitment.taskId}`}
+                commitment={commitment}
+                colors={clientColors}
+              />
             ))}
           </div>
           <p className="tiny dim" style={{ marginTop: 8 }}>
