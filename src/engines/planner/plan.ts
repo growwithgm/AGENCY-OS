@@ -275,6 +275,25 @@ type CoreResult = {
 const minutesBetween = (a: Date, b: Date) => (b.getTime() - a.getTime()) / MIN_MS;
 
 /**
+ * How much of a shallow job to take from a window that cannot hold all of
+ * it, without stranding an unplaceable tail.
+ *
+ * Returns 0 when no honest split exists — the caller then leaves the job
+ * for a window that can take it properly, rather than chipping a piece off
+ * and reporting the rest as homeless.
+ */
+export function splitTake(remaining: number, space: number, minimum: number): number {
+  if (remaining <= space) return remaining;       // it fits whole
+  if (space < minimum) return 0;                  // the piece itself would be too small
+
+  const tail = remaining - space;
+  if (tail >= minimum) return space;              // the rest is still placeable
+
+  const reduced = remaining - minimum;            // leave exactly one minimum behind
+  return reduced >= minimum && reduced <= space ? reduced : 0;
+}
+
+/**
  * Sequential placement through zone segments in time order.
  *
  * Within a segment, work batches: once a mode is running, further work of
@@ -322,7 +341,7 @@ function placeCore(
         if (deps.some((id) => failedIds.has(id))) return false;   // handled after loop
         if (!deps.every((id) => endsAt.has(id) && endsAt.get(id)! <= segment.cursor)) return false;
         if (DEEP_MODES.includes(p.mode)) return p.remaining <= space;
-        return space >= Math.min(MODE_MIN_MINUTES[p.mode], p.remaining);
+        return splitTake(p.remaining, space, MODE_MIN_MINUTES[p.mode]) > 0;
       };
 
       // Batching: same mode first, then anything the zone admits.
@@ -332,9 +351,14 @@ function placeCore(
       if (!pick) pick = pending.find(eligible);
       if (!pick) break;
 
+      // Splitting must not leave a tail too small to place. Taking all
+      // but ten minutes of a job strands those ten minutes below the
+      // mode's minimum, and the whole point of that minimum is that such
+      // a fragment is not usable time. Leave at least a full minimum
+      // behind, or take the job whole.
       const take = DEEP_MODES.includes(pick.mode)
         ? pick.remaining
-        : Math.min(pick.remaining, space);
+        : splitTake(pick.remaining, space, MODE_MIN_MINUTES[pick.mode]);
       const start = segment.cursor;
       const end = new Date(start.getTime() + take * MIN_MS);
 

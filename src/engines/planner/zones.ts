@@ -49,22 +49,43 @@ export function generateZonedSlots(
       .sort((a, b) => a.start_time.localeCompare(b.start_time) || a.name.localeCompare(b.name));
     if (dayZones.length === 0) continue;
 
-    // The daily cap still applies: zones say when and what kind; the cap
+    // The daily cap still applies: zones say when and what kind, the cap
     // says how much a person can actually deliver across all of it.
+    //
+    // It is shared out in proportion to each zone's length rather than
+    // spent in time order. Spending it greedily would let a long morning
+    // of admin swallow the whole budget before the evening ever came up,
+    // and the evening is where the deep work lives — the exact opposite
+    // of what the cap is for. Proportional sharing is also stable: the
+    // same day always yields the same slots (INV-2).
     const capRules = capacityRules.filter((r) => r.weekday === weekday);
-    let capLeft = capRules.length
+    const dailyCap = capRules.length
       ? Math.max(...capRules.map((r) => r.max_minutes))
       : Number.POSITIVE_INFINITY;
 
-    for (const zone of dayZones) {
+    const windows = dayZones.map((zone) => {
       const s = parseTime(zone.start_time);
       const e = parseTime(zone.end_time);
       const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.h, s.m);
       let end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), e.h, e.m);
       // Crossing midnight: ends tomorrow, belongs to today.
       if (end <= start) end = new Date(end.getTime() + 24 * 3600_000);
+      return { zone, start, end, minutes: (end.getTime() - start.getTime()) / MIN_MS };
+    });
 
-      let intervals: Interval[] = [{ start: start < now ? now : start, end }]
+    const totalWindow = windows.reduce((sum, w) => sum + w.minutes, 0);
+    // Whole minutes only. A share of 43.57 would put block boundaries at
+    // 15:28:34, and every duration on screen would be a rounding of
+    // something that was never a real time.
+    const shareOf = (minutes: number) =>
+      !Number.isFinite(dailyCap) || totalWindow <= dailyCap
+        ? Number.POSITIVE_INFINITY
+        : Math.floor((minutes / totalWindow) * dailyCap);
+
+    for (const window of windows) {
+      let capLeft = shareOf(window.minutes);
+
+      let intervals: Interval[] = [{ start: window.start < now ? now : window.start, end: window.end }]
         .filter((iv) => iv.end > iv.start);
 
       for (const b of blackouts) {
@@ -80,8 +101,8 @@ export function generateZonedSlots(
         const take = Math.min(len, capLeft);
         slots.push({
           day: key,
-          zone: zone.name,
-          modes: zone.modes,
+          zone: window.zone.name,
+          modes: window.zone.modes,
           start: iv.start,
           end: take === len ? iv.end : new Date(iv.start.getTime() + take * MIN_MS),
         });
