@@ -19,8 +19,11 @@ import { MODE_MIN_MINUTES, type WorkMode } from '@/engines/planner/types';
 import { loadPlanInputs, todayView } from '@/data/planning';
 import { listZones } from '@/data/zones';
 import { getWork, listWork, updateWork, completeWork, pushWork } from '@/data/work';
-import { listClients } from '@/data/clients';
+import { listClients, clientSummaries } from '@/data/clients';
 import { listActivity } from '@/data/activity';
+import { pendingRequests, getRequest } from '@/data/requests';
+import { weeklyReview } from '@/data/review';
+import type { WorkStatus } from '@/data/types';
 import { buildDiff, type Diff } from './diff';
 import { hm } from '@/lib/format';
 import { isDirect } from './registry';
@@ -110,6 +113,60 @@ export const TOOL_SCHEMAS: Record<string, Schema> = {
       type: 'object',
       properties: { limit: { type: 'integer' } },
     },
+  },
+  list_requests: {
+    description: 'Client requests: what each client has asked for, its state (pending_approval, clarifying, approved, rejected), their stated urgency and asked-for date. THE source of truth for "any new requests?"',
+    parameters: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          enum: ['pending_approval', 'clarifying', 'approved', 'rejected', 'all'],
+          description: 'Filter by state; omit for open ones (pending_approval + clarifying).',
+        },
+      },
+    },
+  },
+  get_request: {
+    description: 'One client request in full: their exact words, the question-and-answer exchange, stated urgency, asked-for date, service area and reference.',
+    parameters: {
+      type: 'object',
+      properties: { request_id: { type: 'string' } },
+      required: ['request_id'],
+    },
+  },
+  list_work: {
+    description: 'Work items with client, status, priority, mode, estimate and the three dates. Filter by status or client name.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['backlog', 'scheduled', 'in_progress', 'blocked', 'waiting_on_client', 'review', 'done'],
+        },
+        client: { type: 'string', description: 'Client name, matched loosely' },
+      },
+    },
+  },
+  get_work: {
+    description: 'One work item in full: description, estimate and actual minutes, mode, all three dates, visibility, slide count.',
+    parameters: {
+      type: 'object',
+      properties: { work_id: { type: 'string' } },
+      required: ['work_id'],
+    },
+  },
+  list_clients: {
+    description: 'Every client with open work count, requests waiting, last completed visible work and last published update — the clients screen as data.',
+    parameters: { type: 'object', properties: {} },
+  },
+  list_updates: {
+    description: 'Client updates: drafts waiting for approval and recently published ones.',
+    parameters: { type: 'object', properties: {} },
+  },
+  get_weekly_review: {
+    description: 'The week in numbers: commitments met and missed, hours by mode and client, peak usage, estimate accuracy, what keeps slipping.',
+    parameters: { type: 'object', properties: {} },
   },
   update_task: {
     description: 'Change a work item’s title, description, estimate, mode, internal target or client-facing title. Cannot change priority or a committed date.',
@@ -221,6 +278,211 @@ async function diffContext(ctx: ToolContext) {
   };
 }
 
+/* ── Sight: the dashboard's surfaces as data ──────────────────────────── */
+
+type RequestRowSource = {
+  id: string;
+  state: string;
+  raw_input: string;
+  created_at: string;
+  draft: {
+    title?: string;
+    stated_urgency?: string | null;
+    requested_date?: string | null;
+    service_area?: string | null;
+    reference?: string | null;
+    detail?: string;
+  } | null;
+  transcript?: { role: 'assistant' | 'user'; content: string }[];
+  clients?: { name: string } | null;
+};
+
+function requestRow(r: RequestRowSource) {
+  return {
+    id: r.id,
+    client: r.clients?.name ?? null,
+    title: r.draft?.title ?? r.raw_input.slice(0, 80),
+    state: r.state,
+    stated_urgency: r.draft?.stated_urgency ?? null,
+    asked_for_date: r.draft?.requested_date ?? null,
+    service_area: r.draft?.service_area ?? null,
+    asked_at: r.created_at,
+  };
+}
+
+async function openRequestRows(db: SupabaseClient): Promise<RequestRowSource[]> {
+  const { data } = await db.from('client_requests')
+    .select('id, state, raw_input, created_at, draft, clients(name)')
+    .in('state', ['pending_approval', 'clarifying'])
+    .order('created_at', { ascending: false });
+  return (data ?? []) as unknown as RequestRowSource[];
+}
+
+async function listRequestsTool(ctx: ToolContext, state: string | null): Promise<ToolResult> {
+  let query = ctx.db.from('client_requests')
+    .select('id, state, raw_input, created_at, draft, clients(name)')
+    .order('created_at', { ascending: false })
+    .limit(25);
+
+  if (!state) query = query.in('state', ['pending_approval', 'clarifying']);
+  else if (state !== 'all') query = query.eq('state', state);
+
+  const { data } = await query;
+  const rows = ((data ?? []) as unknown as RequestRowSource[]).map(requestRow);
+  return { ok: true, data: { requests: rows, count: rows.length } };
+}
+
+async function getRequestTool(ctx: ToolContext, id: string): Promise<ToolResult> {
+  const request = await getRequest(ctx.db, id);
+  if (!request) return { ok: false, refused: 'I cannot find that request.' };
+
+  return {
+    ok: true,
+    data: {
+      ...requestRow(request as unknown as RequestRowSource),
+      their_words: request.raw_input,
+      detail: request.draft?.detail ?? null,
+      reference: request.draft?.reference ?? null,
+      exchange: (request.transcript ?? []).map((t) => ({
+        who: t.role === 'assistant' ? 'operator_asked' : 'client_said',
+        text: t.content,
+      })),
+    },
+  };
+}
+
+async function listWorkTool(
+  ctx: ToolContext,
+  status: string | null,
+  clientName: string | null,
+): Promise<ToolResult> {
+  const clients = await listClients(ctx.db);
+  let clientId: string | undefined;
+  if (clientName) {
+    const needle = clientName.toLowerCase();
+    const match = clients.find((c) => c.name.toLowerCase().includes(needle));
+    if (!match) return { ok: false, refused: `No client matches “${clientName}”.` };
+    clientId = match.id;
+  }
+
+  const rows = await listWork(ctx.db, {
+    clientId,
+    status: (status ?? undefined) as WorkStatus | undefined,
+    limit: 60,
+  });
+
+  return {
+    ok: true,
+    data: {
+      work: rows.map((w) => ({
+        id: w.id,
+        title: w.title,
+        client: w.clients?.name ?? null,
+        status: w.status,
+        priority: w.priority,
+        mode: w.mode ?? 'operational',
+        est_minutes: w.est_minutes,
+        actual_minutes: w.actual_minutes,
+        committed_date: w.committed_date,
+        internal_target: w.internal_target,
+        client_requested_date: w.client_requested_date,
+      })),
+      count: rows.length,
+    },
+  };
+}
+
+async function getWorkTool(ctx: ToolContext, id: string): Promise<ToolResult> {
+  const work = await getWork(ctx.db, id);
+  if (!work) return { ok: false, refused: 'I cannot find that work item.' };
+  return {
+    ok: true,
+    data: {
+      id: work.id,
+      title: work.title,
+      client_title: work.client_title,
+      client: work.clients?.name ?? null,
+      description: work.description,
+      status: work.status,
+      priority: work.priority,
+      mode: work.mode ?? 'operational',
+      est_minutes: work.est_minutes,
+      safe_minutes: work.safe_minutes,
+      actual_minutes: work.actual_minutes,
+      committed_date: work.committed_date,
+      internal_target: work.internal_target,
+      client_requested_date: work.client_requested_date,
+      client_visible: work.client_visible,
+      slid_count: work.slid_count,
+      blocked_reason: work.blocked_reason,
+    },
+  };
+}
+
+async function listClientsTool(ctx: ToolContext): Promise<ToolResult> {
+  const rows = await clientSummaries(ctx.db);
+  return {
+    ok: true,
+    data: {
+      clients: rows.map((c) => ({
+        id: c.id,
+        name: c.name,
+        open_work: c.openWork,
+        requests_waiting: c.openRequests,
+        last_completed: c.lastCompletedAt,
+        last_update_published: c.lastPublishedAt,
+        quiet: c.neglected,
+      })),
+    },
+  };
+}
+
+async function listUpdatesTool(ctx: ToolContext): Promise<ToolResult> {
+  const { data } = await ctx.db.from('client_updates')
+    .select('id, client_id, status, period_start, period_end, version, published_at, clients(name)')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  type Row = {
+    id: string; status: string; period_start: string; period_end: string;
+    version: number; published_at: string | null; clients: { name: string } | null;
+  };
+  return {
+    ok: true,
+    data: {
+      updates: ((data ?? []) as unknown as Row[]).map((u) => ({
+        id: u.id,
+        client: u.clients?.name ?? null,
+        status: u.status,
+        period: `${u.period_start} to ${u.period_end}`,
+        version: u.version,
+        published_at: u.published_at,
+      })),
+    },
+  };
+}
+
+async function weeklyReviewTool(ctx: ToolContext): Promise<ToolResult> {
+  const review = await weeklyReview(ctx.db, ctx.now);
+  return {
+    ok: true,
+    data: {
+      from: review.from,
+      to: review.to,
+      commitments: review.commitments,
+      hours_by_mode: review.hoursByMode,
+      hours_by_client: review.hoursByClient.map(({ client, minutes }) => ({ client, minutes })),
+      mode_switches_by_day: review.modeSwitchesByDay,
+      peak: review.peak,
+      estimates: review.estimates,
+      overrun_factor_by_mode: review.overrunFactorByMode,
+      overrun_reasons: review.overrunReasons,
+      client_visibility: review.visibility.map(({ client, days, targetDays }) => ({ client, days_since_seen: days, target_days: targetDays })),
+      slipped: review.slipped,
+    },
+  };
+}
+
 export async function runTool(
   name: string,
   args: Record<string, unknown>,
@@ -248,6 +510,13 @@ export async function runTool(
       case 'search': return await search(ctx, String(args.query ?? ''));
       case 'get_briefing': return await briefing(ctx);
       case 'list_activity': return await activity(ctx, Number(args.limit ?? 20));
+      case 'list_requests': return await listRequestsTool(ctx, args.state ? String(args.state) : null);
+      case 'get_request': return await getRequestTool(ctx, String(args.request_id ?? ''));
+      case 'list_work': return await listWorkTool(ctx, args.status ? String(args.status) : null, args.client ? String(args.client) : null);
+      case 'get_work': return await getWorkTool(ctx, String(args.work_id ?? ''));
+      case 'list_clients': return await listClientsTool(ctx);
+      case 'list_updates': return await listUpdatesTool(ctx);
+      case 'get_weekly_review': return await weeklyReviewTool(ctx);
       case 'update_task': return await updateTask(ctx, args);
       case 'complete_task': return await completeTask(ctx, args);
       case 'move_task': return await moveTask(ctx, String(args.work_id ?? ''), String(args.target_date ?? ''));
@@ -517,9 +786,10 @@ async function search(ctx: ToolContext, query: string): Promise<ToolResult> {
 }
 
 async function briefing(ctx: ToolContext): Promise<ToolResult> {
-  const [view, input] = await Promise.all([
+  const [view, input, openRequests] = await Promise.all([
     todayView(ctx.db, ctx.now),
     loadPlanInputs(ctx.db, ctx.now),
+    openRequestRows(ctx.db),
   ]);
   const result = plan(input);
 
@@ -529,6 +799,7 @@ async function briefing(ctx: ToolContext): Promise<ToolResult> {
       date: view.date,
       available_minutes: view.availableMinutes,
       planned_minutes: view.plannedMinutes,
+      pending_requests: openRequests.map(requestRow),
       items: view.items.map((i) => ({
         id: i.task.id,
         title: i.task.title,

@@ -42,6 +42,12 @@ export const DIRECT_TOOLS = [
   'can_i_do_this_now', 'when_can_i_do', 'propose_placement',
   'propose_reshuffle', 'what_if',
   'get_briefing', 'get_weekly_review', 'list_activity',
+
+  // Full sight of the dashboard. Everything a screen shows, a tool returns:
+  // an assistant that cannot see the requests badge answers "nothing new"
+  // while the sidebar shows two waiting.
+  'list_requests', 'get_request', 'list_work', 'get_work',
+  'list_clients', 'list_updates',
 ] as const;
 
 export const CONFIRM_TOOLS = [

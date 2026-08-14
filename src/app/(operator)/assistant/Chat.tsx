@@ -71,6 +71,35 @@ function dayMonth(key: string): string {
   return new Date(year, month - 1, day).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 }
 
+function RequestsFacts({ data }: { data: unknown }) {
+  const payload = data as {
+    requests?: {
+      id: string; client: string | null; title: string; state: string;
+      stated_urgency: string | null; asked_for_date: string | null; asked_at: string;
+    }[];
+  };
+  const rows = payload?.requests ?? [];
+  if (rows.length === 0) return <p className="small dim">No requests match.</p>;
+
+  return (
+    <div className="rows">
+      {rows.map((r) => (
+        <div key={r.id} className="rows__row" style={{ alignItems: 'baseline' }}>
+          <span className="small" style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 500 }}>{r.title}</span>
+            <span className="tiny dim" style={{ display: 'block' }}>
+              {r.client ?? 'Unknown client'}
+              {r.stated_urgency ? ` · they said: ${r.stated_urgency}` : ''}
+              {r.asked_for_date ? ` · asked for ${shortDate(r.asked_for_date)}` : ''}
+            </span>
+          </span>
+          <span className="chip chip--pending">{r.state.replace('_', ' ')}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── the facts panel ──────────────────────────────────────────────────── */
 
 const TOOL_LABELS: Record<string, string> = {
@@ -82,6 +111,13 @@ const TOOL_LABELS: Record<string, string> = {
   what_if: 'Simulation',
   search: 'Search',
   list_activity: 'Recent activity',
+  list_requests: 'Client requests',
+  get_request: 'The request',
+  list_work: 'Work',
+  get_work: 'The work item',
+  list_clients: 'Clients',
+  list_updates: 'Updates',
+  get_weekly_review: 'The week',
   update_task: 'Work updated',
   complete_task: 'Work completed',
   move_task: 'Work moved',
@@ -277,6 +313,7 @@ function StepFacts({ step }: { step: Step }) {
       <div className="eyebrow" style={{ marginBottom: 5 }}>{label}</div>
       {step.result.ok ? (
         step.tool === 'get_briefing' ? <BriefingFacts data={step.result.data} />
+          : step.tool === 'list_requests' ? <RequestsFacts data={step.result.data} />
           : step.tool === 'can_i_do_this_now' ? <CanIFacts data={step.result.data} />
             : step.tool === 'when_can_i_do' ? <WindowFacts data={step.result.data} />
               : step.tool === 'search' ? <SearchFacts data={step.result.data} />
