@@ -12,14 +12,13 @@ export default async function PortalRequestPage() {
   // portal).
   const { data } = await supabase.from('client_profile').select('locale').maybeSingle();
   const locale = ((data?.locale as Locale) ?? 'en');
-  const say = t(locale).request;
 
   return (
     <main className="portal">
       <div className="row row--between" style={{ marginBottom: 22 }}>
-        <a href="/portal" className="btn btn--sm btn--quiet">{say.close}</a>
+        <a href="/portal" className="btn btn--sm btn--quiet">{t(locale).request.close}</a>
       </div>
-      <RequestFlow copy={say} />
+      <RequestFlow locale={locale} />
     </main>
   );
 }
