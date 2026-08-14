@@ -119,7 +119,9 @@ export default async function PortalHome() {
 
           <div className="cp-sidebar-bottom">
             <a href="/portal/account">{say.account}</a>
-            <a href="/portal/signout">{say.signOut}</a>
+            <form action="/portal/signout" method="POST">
+              <button type="submit" className="as-link">{say.signOut}</button>
+            </form>
           </div>
         </aside>
 

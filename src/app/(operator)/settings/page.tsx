@@ -46,9 +46,12 @@ function clockRange(startsAt: string, endsAt: string): string {
   return `${fmt(startsAt)}–${fmt(endsAt)}`;
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: {
+  searchParams: Promise<{ problem?: string }>;
+}) {
   const { supabase } = await requireOperator();
   const now = new Date();
+  const { problem } = await searchParams;
 
   const [zones, hoursRes, blackoutsRes, rulesRes, clients, notifyRes] = await Promise.all([
     listZones(supabase),
@@ -90,6 +93,17 @@ export default async function SettingsPage() {
         without argument. The assistant can read these rules and will refuse work that breaks
         them, but it cannot change them — this screen is the only way they change.
       </p>
+
+      {problem && (
+        <p role="alert" className="small" style={{
+          marginTop: 12, padding: '10px 14px', borderRadius: 8,
+          border: '1px solid color-mix(in srgb, var(--red) 35%, transparent)',
+          background: 'color-mix(in srgb, var(--red) 7%, transparent)',
+          color: 'var(--red)', maxWidth: '68ch',
+        }}>
+          {String(problem).slice(0, 200)} Nothing was changed.
+        </p>
+      )}
 
       {/* Five instruction panels, paired on a wide screen. */}
       <div className="grid-2" style={{ marginTop: 18 }}>

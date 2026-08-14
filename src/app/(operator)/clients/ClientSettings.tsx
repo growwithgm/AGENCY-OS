@@ -6,7 +6,7 @@ import { saveClientSettingsAction, archiveClientAction, removeClientAction } fro
 const NOTIFY = [
   ['never', 'Never', 'They see new work in the portal, but nothing arrives in their inbox.'],
   ['digest', 'Weekly digest', 'One email on Friday covering what was added, worked on and finished.'],
-  ['every', 'Every new item', 'An email each time something visible is added. Use with restraint.'],
+  ['every', 'Every new item', 'An email the moment something visible finishes or an update is published. Use with restraint.'],
 ] as const;
 
 /**
@@ -17,7 +17,7 @@ const NOTIFY = [
  * on this screen that ends someone's access.
  */
 export function ClientSettings({
-  clientId, clientName, notifyMode, targetDays, status, contactCount,
+  clientId, clientName, notifyMode, targetDays, status, contactCount, emailReady,
 }: {
   clientId: string;
   clientName: string;
@@ -25,6 +25,8 @@ export function ClientSettings({
   targetDays: number;
   status: string;
   contactCount: number;
+  /** Whether the email transport is configured — without it, both email modes are inert. */
+  emailReady: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -46,6 +48,13 @@ export function ClientSettings({
               </span>
             </label>
           ))}
+          {!emailReady && (
+            <p className="tiny" style={{ color: 'var(--red)', marginTop: 8 }}>
+              Email sending is not configured (RESEND_API_KEY / RESEND_FROM), so neither email
+              mode can actually deliver anything yet. The choice is saved and takes effect the
+              moment sending is set up.
+            </p>
+          )}
         </div>
 
         <label className="field">

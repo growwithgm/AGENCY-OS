@@ -46,7 +46,9 @@ export function Nav({ requestCount, operatorEmail, dateShort }: {
         <div className="sidebar__foot">
           <div>Signed in as</div>
           <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{operatorEmail}</div>
-          <a href="/signout" style={{ fontSize: 11.5 }}>Sign out</a>
+          <form action="/signout" method="POST">
+            <button type="submit" className="as-link" style={{ fontSize: 11.5 }}>Sign out</button>
+          </form>
         </div>
       </nav>
 

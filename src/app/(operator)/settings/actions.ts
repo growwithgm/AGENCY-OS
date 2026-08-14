@@ -30,6 +30,15 @@ async function replanAndRevalidate(supabase: SupabaseClient) {
   revalidatePath('/work');
 }
 
+/**
+ * A form arriving with a bad value is the operator's browser being odd, not
+ * a system fault — so it must never produce an error page. Bounce back to
+ * Settings with a plain sentence instead.
+ */
+function backToSettings(problem: string): never {
+  redirect(`/settings?problem=${encodeURIComponent(problem)}`);
+}
+
 function readModes(form: FormData): WorkMode[] {
   const picked = form.getAll('modes').map(String);
   return MODES.filter((m) => picked.includes(m));
@@ -37,7 +46,9 @@ function readModes(form: FormData): WorkMode[] {
 
 function readTime(form: FormData, field: string): string {
   const value = String(form.get(field) ?? '').trim();
-  if (!/^\d{2}:\d{2}/.test(value)) throw new Error(`${field} must be a time`);
+  if (!/^\d{2}:\d{2}/.test(value)) {
+    backToSettings('Both times are needed, as HH:MM — check them and try again.');
+  }
   return value.slice(0, 5);
 }
 
@@ -132,19 +143,27 @@ export async function saveWorkingHoursAction(form: FormData) {
 export async function addBlackoutAction(form: FormData) {
   const { supabase } = await requireOperator();
 
-  const date = String(form.get('date') ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('a date is required');
+  const date = String(form.get('date') ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    backToSettings('A blackout needs a date — pick one and try again.');
+  }
 
-  const start = readTime(form, 'start_time');
-  const end = readTime(form, 'end_time');
+  const start = String(form.get('start_time') ?? '').trim();
+  const end = String(form.get('end_time') ?? '').trim();
+  if (!/^\d{2}:\d{2}/.test(start) || !/^\d{2}:\d{2}/.test(end)) {
+    backToSettings('A blackout needs a start and an end time.');
+  }
   const reason = String(form.get('reason') ?? '').trim() || null;
 
   const [y, m, d] = date.split('-').map(Number);
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
+  const [sh, sm] = start.slice(0, 5).split(':').map(Number);
+  const [eh, em] = end.slice(0, 5).split(':').map(Number);
 
   const startsAt = new Date(y, m - 1, d, sh, sm);
   const endsAt = new Date(y, m - 1, d, eh, em);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    backToSettings('That date and time could not be read — check them and try again.');
+  }
   // Same rule as a zone: an end at or before the start runs into the next day.
   if (endsAt <= startsAt) endsAt.setDate(endsAt.getDate() + 1);
 

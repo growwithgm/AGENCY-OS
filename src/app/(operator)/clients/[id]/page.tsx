@@ -14,6 +14,7 @@ import { listUpdates } from '@/data/updates';
 import { requestsForClient } from '@/data/requests';
 import { STATUS_LABELS, type WorkStatus } from '@/data/types';
 import { hm, relativePhrase, shortDate } from '@/lib/format';
+import { emailConfigured } from '@/portal/digest';
 import { ClientName, ModeChip, StatusChip } from '@/components/marks';
 import { PortalAccess } from '../PortalAccess';
 import { ClientSettings } from '../ClientSettings';
@@ -68,7 +69,17 @@ export default async function ClientDetailPage({ params, searchParams }: {
     (r) => r.state === 'pending_approval' || r.state === 'clarifying',
   );
   const visible = work.filter((w) => w.client_visible);
-  const lastSeen = visibilityRes.data?.last_visible_completion ?? null;
+
+  // What the client actually saw finish: the newest completed visible item.
+  // The rotation clock in client_visibility is seeded at creation so a new
+  // client is not treated as starved — that makes it a scheduling input,
+  // not a fact about the past, and it must never be displayed as one.
+  const lastSeen = visible
+    .filter((w) => w.status === 'done' && w.completed_at)
+    .reduce<string | null>(
+      (newest, w) => (!newest || (w.completed_at as string) > newest ? (w.completed_at as string) : newest),
+      null,
+    );
 
   return (
     <main className="screen">
@@ -329,6 +340,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
           targetDays={visibilityRes.data?.target_days ?? 3}
           status={client.status}
           contactCount={contacts.length}
+          emailReady={emailConfigured()}
         />
       )}
     </main>

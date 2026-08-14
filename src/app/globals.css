@@ -296,6 +296,11 @@ a:hover { color: var(--blue-deep); text-decoration: underline; }
   color: var(--ink-400);
   overflow-wrap: anywhere;
 }
+.sidebar__foot button.as-link {
+  color: var(--navy);
+  min-height: 32px;
+}
+.sidebar__foot button.as-link:hover { text-decoration: underline; }
 
 .nav-badge {
   font-family: var(--font-mono-stack);
@@ -446,6 +451,19 @@ a:hover { color: var(--blue-deep); text-decoration: underline; }
   align-items: center;
   min-height: 44px;
   padding: 0 2px;
+}
+
+/* A POST form's submit button that reads as a plain inline link (sign out). */
+button.as-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 /* ───────────────────────── cards & rows ───────────────────────── */
@@ -997,7 +1015,8 @@ body:has(.cp-app) { background: var(--ground-portal); }
   gap: 2px;
   border-top: 1px solid rgba(255, 255, 255, .1);
 }
-.cp-sidebar-bottom a {
+.cp-sidebar-bottom a,
+.cp-sidebar-bottom button.as-link {
   color: #9ca3af;
   font-size: 12.5px;
   text-decoration: none;
@@ -1005,7 +1024,8 @@ body:has(.cp-app) { background: var(--ground-portal); }
   display: inline-flex;
   align-items: center;
 }
-.cp-sidebar-bottom a:hover { color: #fff; }
+.cp-sidebar-bottom a:hover,
+.cp-sidebar-bottom button.as-link:hover { color: #fff; }
 
 .cp-main { min-width: 0; }
 

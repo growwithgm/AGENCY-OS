@@ -9,6 +9,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAudit } from '@/lib/audit';
+import { env } from '@/lib/env';
+import { notifyClientNow } from '@/portal/instantNotify';
 
 export type UpdateEvidence = {
   task_id: string;
@@ -97,7 +99,7 @@ export async function publishUpdate(db: SupabaseClient, id: string, actor?: stri
     .update({ status: 'published', approved_at: now, published_at: now })
     .eq('id', id)
     .eq('status', 'draft')
-    .select('id, client_id');
+    .select('id, client_id, body_md');
 
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error('update not found, or it is already published');
@@ -109,6 +111,13 @@ export async function publishUpdate(db: SupabaseClient, id: string, actor?: stri
     actor,
     note: 'visible to the client from this moment',
   });
+
+  // A client on 'every new item' gets the published text in their inbox
+  // at once. The text was just approved, so it is already client-safe.
+  await notifyClientNow(db, data[0].client_id, {
+    kind: 'update_published',
+    body: data[0].body_md,
+  }, `${env.APP_URL}/portal`);
 }
 
 /** A correction is a new version, never an edit of what was sent (INV-12). */

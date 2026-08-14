@@ -7,6 +7,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAudit } from '@/lib/audit';
+import { env } from '@/lib/env';
+import { notifyClientNow } from '@/portal/instantNotify';
 import { replan } from './planning';
 import type { WorkMode, WorkRow, WorkStatus } from './types';
 import {
@@ -236,7 +238,7 @@ export async function completeWork(
   actor?: string,
 ): Promise<{ overranBy: number | null }> {
   const { data: current } = await db.from('tasks')
-    .select('actual_minutes, title, mode, client_id, est_minutes, client_visible')
+    .select('actual_minutes, title, client_title, mode, client_id, est_minutes, client_visible')
     .eq('id', id).maybeSingle();
 
   await db.from('effort_records').insert({
@@ -276,6 +278,14 @@ export async function completeWork(
       client_id: current.client_id,
       last_visible_completion: completedAt,
     });
+
+    // A client on 'every new item' hears about it now; everyone else
+    // waits for the digest. Never throws — mail is not allowed to turn
+    // finishing work into an error.
+    await notifyClientNow(db, current.client_id, {
+      kind: 'work_finished',
+      title: current.client_title ?? current.title,
+    }, `${env.APP_URL}/portal`);
   }
 
   await recordAudit({
