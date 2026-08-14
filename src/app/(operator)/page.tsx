@@ -103,81 +103,87 @@ export default async function TodayPage() {
         )}
       </Capacity>
 
-      {running && (
-        <div style={{ marginTop: 16 }}>
-          <RunningNow
-            item={{
-              id: running.task.id,
-              title: running.task.title,
-              clientName: running.clientName,
-              colorIndex: running.clientColorIndex,
-              estMinutes: running.task.est_minutes,
-              actualMinutes: running.task.actual_minutes,
-            }}
-          />
-        </div>
-      )}
+      {/* The working column and the glancing rail. On a real monitor the
+          plan gets the width; what needs a look — running now, attention,
+          the shape of the day — sits alongside instead of pushing the
+          plan below the fold. One column on anything narrow. */}
+      <div className="cols" style={{ marginTop: 16 }}>
+        <div className="cols__main">
+          {overruns.map((item) => (
+            <div key={item.id} style={{ marginBottom: 12 }}>
+              <OverrunAsk taskId={item.id} overrunMinutes={item.overrunMinutes} />
+            </div>
+          ))}
 
-      <div style={{ marginTop: 16 }}>
-        <DayShape zones={shape.zones} modeSwitches={shape.modeSwitches} />
-      </div>
-
-      {overruns.map((item) => (
-        <div key={item.id} style={{ marginTop: 12 }}>
-          <OverrunAsk taskId={item.id} overrunMinutes={item.overrunMinutes} />
-        </div>
-      ))}
-
-      <Flags signals={signals} />
-
-      <div className="section-label">
-        <span>{over ? 'Will fit today' : 'In planned order'}</span>
-        <span className="num muted">{hm(view.plannedMinutes)}</span>
-      </div>
-
-      {items.length === 0 && (
-        <div className="card">
-          <p className="muted">Nothing is planned for today.</p>
-          <p className="tiny dim" style={{ marginTop: 6 }}>
-            Either today has no zones set, or there is no open work to place. Both are
-            fixable: zones live in Settings, work starts at Capture.
-          </p>
-        </div>
-      )}
-
-      {items.map((item) => <WorkRow key={item.id} item={item} />)}
-
-      {unplaced.length > 0 && (
-        <>
-          <div className="section-label" style={{ color: 'var(--red)' }}>
-            <span>Will not fit</span>
-            <span className="num">{hm(overflowMinutes)}</span>
+          <div className="section-label">
+            <span>{over ? 'Will fit today' : 'In planned order'}</span>
+            <span className="num muted">{hm(view.plannedMinutes)}</span>
           </div>
 
-          {unplaced.map((risk) => (
-            <WorkRow
-              key={risk.task.id}
+          {items.length === 0 && (
+            <div className="card">
+              <p className="muted">Nothing is planned for today.</p>
+              <p className="tiny dim" style={{ marginTop: 6 }}>
+                Either today has no zones set, or there is no open work to place. Both are
+                fixable: zones live in Settings, work starts at Capture.
+              </p>
+            </div>
+          )}
+
+          {items.map((item) => <WorkRow key={item.id} item={item} />)}
+
+          {unplaced.length > 0 && (
+            <>
+              <div className="section-label" style={{ color: 'var(--red)' }}>
+                <span>Will not fit</span>
+                <span className="num">{hm(overflowMinutes)}</span>
+              </div>
+
+              {unplaced.map((risk) => (
+                <WorkRow
+                  key={risk.task.id}
+                  item={{
+                    id: risk.task.id,
+                    title: risk.task.title,
+                    clientName: clientLookup.get(risk.task.client_id)?.name ?? null,
+                    colorIndex: clientLookup.get(risk.task.client_id)?.colorIndex ?? null,
+                    status: risk.task.status,
+                    priority: risk.task.priority,
+                    mode: risk.task.mode ?? 'operational',
+                    minutes: risk.minutes_unplaced,
+                    estMinutes: risk.task.est_minutes,
+                    actualMinutes: risk.task.actual_minutes,
+                    committedDate: risk.task.committed_date,
+                    internalTarget: risk.task.internal_target,
+                    slidCount: risk.task.slid_count,
+                    atRisk: true,
+                    riskNote: riskSentence(risk),
+                  }}
+                />
+              ))}
+            </>
+          )}
+        </div>
+
+        <div className="cols__side">
+          {running && (
+            <RunningNow
               item={{
-                id: risk.task.id,
-                title: risk.task.title,
-                clientName: clientLookup.get(risk.task.client_id)?.name ?? null,
-                colorIndex: clientLookup.get(risk.task.client_id)?.colorIndex ?? null,
-                status: risk.task.status,
-                priority: risk.task.priority,
-                mode: risk.task.mode ?? 'operational',
-                minutes: risk.minutes_unplaced,
-                estMinutes: risk.task.est_minutes,
-                actualMinutes: risk.task.actual_minutes,
-                committedDate: risk.task.committed_date,
-                internalTarget: risk.task.internal_target,
-                slidCount: risk.task.slid_count,
-                atRisk: true,
-                riskNote: riskSentence(risk),
+                id: running.task.id,
+                title: running.task.title,
+                clientName: running.clientName,
+                colorIndex: running.clientColorIndex,
+                estMinutes: running.task.est_minutes,
+                actualMinutes: running.task.actual_minutes,
               }}
             />
-          ))}
-        </>
-      )}
+          )}
+
+          <DayShape zones={shape.zones} modeSwitches={shape.modeSwitches} />
+
+          <Flags signals={signals} />
+        </div>
+      </div>
     </main>
   );
 }

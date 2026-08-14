@@ -25,7 +25,8 @@ export type AuditEventType =
   | 'login_created'
   | 'login_disabled'
   | 'login_enabled'
-  | 'login_removed';
+  | 'login_removed'
+  | 'data_removed';
 
 export async function recordAudit(input: {
   type: AuditEventType;

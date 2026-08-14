@@ -15,6 +15,7 @@ import { PRIORITY_LABELS } from '@/data/types';
 import { ModeChip } from '@/components/marks';
 import { MODES, MODE_MIN_MINUTES } from '@/engines/planner/types';
 import { ZoneEditor } from './ZoneEditor';
+import { DangerZone } from './DangerZone';
 import { NotifySettings, type NotifyKind } from './NotifySettings';
 import {
   addBlackoutAction, deleteRecurrenceAction, removeBlackoutAction,
@@ -90,9 +91,12 @@ export default async function SettingsPage() {
         them, but it cannot change them — this screen is the only way they change.
       </p>
 
+      {/* Five instruction panels, paired on a wide screen. */}
+      <div className="grid-2" style={{ marginTop: 18 }}>
+
       {/* ───────────────────────── zones ───────────────────────── */}
 
-      <section className="card card--accent" style={{ marginTop: 18 }}>
+      <section className="card card--accent">
         <div className="section-label" style={{ marginTop: 0 }}><span>Your day — zones</span></div>
 
         <p className="small muted" style={{ maxWidth: '68ch' }}>
@@ -128,7 +132,7 @@ export default async function SettingsPage() {
 
       {/* ─────────────────── hours and the daily cap ─────────────────── */}
 
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <div className="section-label" style={{ marginTop: 0 }}><span>Working hours and the daily cap</span></div>
 
         <p className="small muted" style={{ maxWidth: '68ch' }}>
@@ -193,7 +197,7 @@ export default async function SettingsPage() {
 
       {/* ───────────────────────── blackouts ───────────────────────── */}
 
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <div className="section-label" style={{ marginTop: 0 }}><span>Exceptions</span></div>
 
         <p className="small muted" style={{ maxWidth: '68ch' }}>
@@ -256,7 +260,7 @@ export default async function SettingsPage() {
 
       {/* ───────────────────────── recurring work ───────────────────────── */}
 
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <div className="section-label" style={{ marginTop: 0 }}><span>Recurring work</span></div>
 
         <p className="small muted" style={{ maxWidth: '68ch' }}>
@@ -311,7 +315,7 @@ export default async function SettingsPage() {
 
       {/* ───────────────────────── notifications ───────────────────────── */}
 
-      <section className="card" style={{ marginTop: 16 }}>
+      <section className="card">
         <div className="section-label" style={{ marginTop: 0 }}><span>Notifications</span></div>
 
         <div className="row" style={{ gap: 8, alignItems: 'baseline' }}>
@@ -346,6 +350,9 @@ export default async function SettingsPage() {
           <NotifySettings peakBlackout={peakBlackout} kinds={notifyKinds} />
         </div>
       </section>
+      <DangerZone />
+
+      </div>
     </main>
   );
 }

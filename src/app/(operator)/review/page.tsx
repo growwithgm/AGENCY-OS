@@ -77,6 +77,11 @@ export default async function ReviewPage() {
         )}
       </section>
 
+      {/* The rest of the week reads as a dashboard: paired sections side
+          by side on a real monitor, one column on anything narrow. */}
+      <div className="grid-2" style={{ marginTop: 16 }}>
+
+      <section>
       <div className="section-label"><span>Where the hours went</span><span className="num">{hm(totalMinutes)}</span></div>
       <div className="card">
         <div className="rows">
@@ -92,6 +97,9 @@ export default async function ReviewPage() {
         </div>
       </div>
 
+      </section>
+
+      <section>
       <div className="section-label"><span>By client</span></div>
       <div className="card">
         <div className="rows">
@@ -107,6 +115,9 @@ export default async function ReviewPage() {
         </div>
       </div>
 
+      </section>
+
+      <section>
       <div className="section-label"><span>Context switching</span></div>
       <div className="card">
         <div className="rows">
@@ -131,6 +142,9 @@ export default async function ReviewPage() {
         </p>
       </div>
 
+      </section>
+
+      <section>
       <div className="section-label"><span>Peak hours</span></div>
       <div className="card">
         <div className="rows">
@@ -158,6 +172,9 @@ export default async function ReviewPage() {
         </p>
       </div>
 
+      </section>
+
+      <section>
       <div className="section-label"><span>Estimates</span></div>
       <div className="card">
         {review.estimates.samples === 0 ? (
@@ -204,8 +221,10 @@ export default async function ReviewPage() {
         </p>
       </div>
 
+      </section>
+
       {review.overrunReasons.length > 0 && (
-        <>
+        <section>
           <div className="section-label"><span>Why work ran over</span></div>
           <div className="card">
             <div className="rows">
@@ -217,9 +236,10 @@ export default async function ReviewPage() {
               ))}
             </div>
           </div>
-        </>
+        </section>
       )}
 
+      <section>
       <div className="section-label"><span>What each client has seen</span></div>
       <div className="card">
         <div className="rows">
@@ -245,8 +265,10 @@ export default async function ReviewPage() {
         </p>
       </div>
 
+      </section>
+
       {review.slipped.length > 0 && (
-        <>
+        <section>
           <div className="section-label"><span>What keeps moving</span></div>
           <div className="card">
             <div className="rows">
@@ -272,8 +294,10 @@ export default async function ReviewPage() {
               either bigger than the estimate says, or it is not actually going to happen.
             </p>
           </div>
-        </>
+        </section>
       )}
+
+      </div>
     </main>
   );
 }

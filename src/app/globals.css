@@ -161,9 +161,77 @@ a:hover { color: var(--blue-deep); text-decoration: underline; }
 .screen {
   flex: 1;
   min-width: 0;
-  padding: 28px 32px 40px;
-  max-width: 900px;
+  padding: 28px clamp(24px, 3vw, 48px) 48px;
+  max-width: 1560px;
 }
+
+/*
+ * Dashboard layout primitives.
+ *
+ * The old shell capped every page at 900px, which read as a strip of
+ * content down the left of any real monitor. Pages now compose from
+ * these instead: a stat row across the top, a main column with a side
+ * rail, or two equal columns. All of them collapse to one column on
+ * narrow screens — the mobile layout is unchanged.
+ */
+
+/* A row of headline figures. Tiles size themselves; the row wraps. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  border: 1px solid var(--paper-300);
+  background: #fff;
+  border-radius: 6px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.stat__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat__value {
+  font-family: var(--font-mono-stack);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+.stat__note { font-size: 11.5px; color: var(--ink-400); margin-top: 4px; }
+
+/* Main column + side rail. The rail holds what you glance at; the main
+   column holds what you work in. */
+.cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.cols__main { min-width: 0; display: flex; flex-direction: column; }
+.cols__side { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+
+@media (min-width: 1200px) {
+  .cols { grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; }
+  .cols__side { position: sticky; top: 24px; }
+}
+
+/* Two equal columns for section pairs (review, settings). */
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+@media (min-width: 1100px) {
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.grid-2 > section { min-width: 0; }
+
+/* Inside a grid cell, the first section label should not add top margin. */
+.cols__main > .section-label:first-child,
+.grid-2 section > .section-label:first-child,
+.cols__side > .section-label:first-child { margin-top: 0; }
 
 .sidebar {
   width: 214px;

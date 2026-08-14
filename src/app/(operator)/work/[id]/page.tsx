@@ -61,7 +61,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
   );
 
   return (
-    <main className="screen">
+    <main className="screen" style={{ maxWidth: 1100 }}>
       <div className="head-row">
         <div>
           <div className="small muted" style={{ marginBottom: 4 }}>

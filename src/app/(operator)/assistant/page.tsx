@@ -69,6 +69,24 @@ export default async function AssistantPage() {
 
       <AiHealthBanner healthy={healthy} />
 
+      {/* The conversation gets the width; the day's figures sit beside it. */}
+      <div className="cols">
+      <div className="cols__main">
+
+      <div className="section-label" style={{ marginTop: 0 }}><span>Ask, or tell it what changed</span></div>
+      <p className="small muted" style={{ marginBottom: 10 }}>
+        It can answer questions about the plan, move your own work, start and finish things, and
+        show you what a change would cost before you make it. Priorities, committed dates and
+        anything a client sees come back as a panel for you to tap. Press ⌘K anywhere to open the
+        same thing in a smaller window.
+      </p>
+
+      <Chat transcription={transcriptionConfigured()} offline={!healthy} running={running} />
+
+      </div>
+
+      <div className="cols__side">
+
       <section className="card">
         <div className="spread" style={{ marginBottom: 8 }}>
           <span className="eyebrow">Today&rsquo;s brief</span>
@@ -87,16 +105,6 @@ export default async function AssistantPage() {
           )}
         </div>
       </section>
-
-      <div className="section-label"><span>Ask, or tell it what changed</span></div>
-      <p className="small muted" style={{ marginBottom: 10 }}>
-        It can answer questions about the plan, move your own work, start and finish things, and
-        show you what a change would cost before you make it. Priorities, committed dates and
-        anything a client sees come back as a panel for you to tap. Press ⌘K anywhere to open the
-        same thing in a smaller window.
-      </p>
-
-      <Chat transcription={transcriptionConfigured()} offline={!healthy} running={running} />
 
       {insight && (
         <>
@@ -126,6 +134,9 @@ export default async function AssistantPage() {
           </div>
         </>
       )}
+
+      </div>
+      </div>
     </main>
   );
 }

@@ -54,7 +54,7 @@ export default async function CapturePage({
   const parked = drafts.filter((d) => d.id !== resumeId);
 
   return (
-    <main className="screen">
+    <main className="screen" style={{ maxWidth: 980 }}>
       <div className="head-row">
         <div>
           <div className="eyebrow">New work</div>

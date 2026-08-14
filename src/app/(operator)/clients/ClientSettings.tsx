@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { saveClientSettingsAction, archiveClientAction } from './actions';
+import { saveClientSettingsAction, archiveClientAction, removeClientAction } from './actions';
 
 const NOTIFY = [
   ['never', 'Never', 'They see new work in the portal, but nothing arrives in their inbox.'],
@@ -28,6 +28,8 @@ export function ClientSettings({
   contactCount: number;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [typedName, setTypedName] = useState('');
 
   return (
     <div className="stack">
@@ -110,6 +112,58 @@ export function ClientSettings({
             </p>
             <button type="button" className="btn btn--sm" style={{ marginTop: 8 }} onClick={() => setConfirming(true)}>
               Archive this client
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="card card--over">
+        <div className="section-label" style={{ marginTop: 0 }}><span>Remove permanently</span></div>
+        {removing ? (
+          <form action={removeClientAction} className="stack">
+            <input type="hidden" name="client_id" value={clientId} />
+            <p className="small">
+              This deletes {clientName} entirely: all their work, their requests, their
+              updates, and {contactCount === 1 ? 'their one login' : `all ${contactCount} of their logins`} —
+              ending any session already open. It cannot be undone. What you have learned
+              about how long work takes is kept.
+            </p>
+            <label className="field">
+              <span className="label">Type the client&rsquo;s name to confirm</span>
+              <input
+                name="confirm_name"
+                className="input"
+                autoComplete="off"
+                placeholder={clientName}
+                value={typedName}
+                onChange={(e) => setTypedName(e.target.value)}
+              />
+            </label>
+            <div className="row" style={{ gap: 8 }}>
+              <button
+                type="submit"
+                className="btn btn--danger"
+                disabled={typedName.trim().toLowerCase() !== clientName.trim().toLowerCase()}
+              >
+                Remove {clientName} for ever
+              </button>
+              <button
+                type="button"
+                className="btn btn--quiet"
+                onClick={() => { setRemoving(false); setTypedName(''); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <p className="small dim">
+              Deletes the client and everything belonging to them. If you only want to end
+              their access, archive them instead — that keeps the record.
+            </p>
+            <button type="button" className="btn btn--sm" style={{ marginTop: 8 }} onClick={() => setRemoving(true)}>
+              Remove this client…
             </button>
           </>
         )}

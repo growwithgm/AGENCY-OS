@@ -39,7 +39,14 @@ export default async function ClientsPage() {
         </div>
       )}
 
-      <div className="rows">
+      {/* One card per brand — a wall of tiles, not a strip of rows. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+          gap: 12,
+        }}
+      >
         {clients.map((client) => {
           const stalePublish = client.daysSincePublished === null
             || client.daysSincePublished >= NEGLECT_DAYS;
@@ -48,40 +55,40 @@ export default async function ClientsPage() {
             <a
               key={client.id}
               href={`/clients/${client.id}`}
-              className="rows__row"
-              style={{ color: 'inherit', textDecoration: 'none', alignItems: 'flex-start' }}
+              className="card"
+              style={{ color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
-              <span style={{ flex: 1, minWidth: 0 }}>
+              <div className="spread" style={{ marginBottom: 10 }}>
                 <span style={{ fontWeight: 600, fontSize: 15 }}>
                   <ClientName name={client.name} colorIndex={client.color_index} />
-                  {client.neglected && (
-                    <span className="tag tag--blocked" style={{ marginLeft: 8 }}>Quiet</span>
-                  )}
                 </span>
-                <span className="row tiny dim" style={{ gap: 8, marginTop: 4 }}>
-                  <span>
-                    Last finished{' '}
-                    <span className="num">
-                      {client.lastCompletedAt ? relativePhrase(client.lastCompletedAt.slice(0, 10)) : 'never'}
-                    </span>
-                  </span>
-                  <span style={{ color: stalePublish ? 'var(--amber-deep)' : undefined }}>
-                    Last update{' '}
-                    <span className="num">
-                      {client.lastPublishedAt ? relativePhrase(client.lastPublishedAt.slice(0, 10)) : 'never'}
-                    </span>
-                  </span>
-                </span>
-              </span>
+                {client.neglected && <span className="tag tag--blocked">Quiet</span>}
+              </div>
 
-              <span className="small num dim" style={{ textAlign: 'right' }}>
-                {client.openWork} open
-                {client.openRequests > 0 && (
-                  <span style={{ display: 'block', color: 'var(--red)' }}>
-                    {client.openRequests} waiting
+              <div className="rows">
+                <div className="rows__row">
+                  <span className="tiny dim">Open work</span>
+                  <span className="small num">{client.openWork}</span>
+                </div>
+                <div className="rows__row">
+                  <span className="tiny dim">Requests waiting</span>
+                  <span className="small num" style={{ color: client.openRequests > 0 ? 'var(--red)' : undefined }}>
+                    {client.openRequests}
                   </span>
-                )}
-              </span>
+                </div>
+                <div className="rows__row">
+                  <span className="tiny dim">Last finished</span>
+                  <span className="small num">
+                    {client.lastCompletedAt ? relativePhrase(client.lastCompletedAt.slice(0, 10)) : 'never'}
+                  </span>
+                </div>
+                <div className="rows__row">
+                  <span className="tiny dim">Last update</span>
+                  <span className="small num" style={{ color: stalePublish ? 'var(--amber-deep)' : undefined }}>
+                    {client.lastPublishedAt ? relativePhrase(client.lastPublishedAt.slice(0, 10)) : 'never'}
+                  </span>
+                </div>
+              </div>
             </a>
           );
         })}

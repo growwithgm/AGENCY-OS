@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { provisionClientLogin, setLoginDisabled, deleteLogin } from '@/lib/authFlow';
@@ -172,6 +173,51 @@ export async function archiveClientAction(form: FormData) {
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath('/clients');
+}
+
+/**
+ * Remove a client permanently.
+ *
+ * This is the one irreversible action on the client screen, so it demands
+ * the client's name typed back before it runs. Deleting the auth users
+ * first ends every open portal session; the client row's cascades then
+ * take the work, requests, updates, contacts and visibility state with it.
+ * Reference-class history survives (client_id is set null, not deleted) —
+ * evidence about how long work takes outlives the client it was done for.
+ */
+export async function removeClientAction(form: FormData) {
+  const { supabase } = await requireOperator();
+
+  const clientId = String(form.get('client_id') ?? '');
+  const typedName = String(form.get('confirm_name') ?? '').trim();
+  if (!clientId) throw new Error('client_id is required');
+
+  const { data: client } = await supabase.from('clients')
+    .select('name').eq('id', clientId).maybeSingle();
+  if (!client) throw new Error('client not found');
+
+  if (typedName.toLowerCase() !== client.name.trim().toLowerCase()) {
+    throw new Error('The name you typed does not match this client.');
+  }
+
+  const { data: contacts } = await supabase.from('client_contacts')
+    .select('auth_user_id').eq('client_id', clientId);
+  for (const contact of contacts ?? []) {
+    if (contact.auth_user_id) await deleteLogin(contact.auth_user_id);
+  }
+
+  const { error } = await supabase.from('clients').delete().eq('id', clientId);
+  if (error) throw new Error(error.message);
+
+  await recordAudit({
+    type: 'login_removed',
+    subjectTable: 'clients',
+    subjectId: clientId,
+    note: `client "${client.name}" removed permanently; ${contacts?.length ?? 0} logins deleted`,
+  });
+
+  revalidatePath('/clients');
+  redirect('/clients');
 }
 
 /* ── Portal access — the operator creates every client login ──────────── */

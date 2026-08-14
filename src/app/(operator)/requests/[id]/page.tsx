@@ -227,6 +227,12 @@ export default async function RequestDetailPage({ params, searchParams }: {
         )}
       </div>
 
+      {/* Evidence in the main column, the decision in a rail beside it —
+          the operator reads left, decides right, and the decision stays in
+          view while they scroll the evidence. One column when narrow. */}
+      <div className="cols" style={{ marginTop: 12 }}>
+      <div className="cols__main">
+
       {/* ── 1 · Their own words ───────────────────────────────────────────
           The raw text is data. It is printed as text and read by nobody but
           the operator: it never selects a mode, a date or a priority. */}
@@ -471,6 +477,10 @@ export default async function RequestDetailPage({ params, searchParams }: {
         </>
       )}
 
+      </div>
+
+      <div className="cols__side">
+
       {/* ── The decision ── */}
       {request.state === 'pending_approval' && (
         <>
@@ -558,6 +568,8 @@ export default async function RequestDetailPage({ params, searchParams }: {
           </div>
         </>
       )}
+      </div>
+      </div>
     </main>
   );
 }

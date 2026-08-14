@@ -103,29 +103,24 @@ export default async function ClientDetailPage({ params, searchParams }: {
 
       {tab === 'overview' && (
         <>
-          <div className="card">
-            <div className="rows">
-              <Stat label="Open work" value={`${work.filter((w) => w.status !== 'done').length}`} />
-              <Stat
-                label="Visible to them"
-                value={`${visible.length} of ${work.length}`}
-              />
-              <Stat
-                label="Last thing they saw finish"
-                value={lastSeen ? relativePhrase(lastSeen.slice(0, 10)) : 'nothing yet'}
-                warn={!lastSeen}
-              />
-              <Stat
-                label="Last update published"
-                value={published[0] ? relativePhrase(published[0].published_at?.slice(0, 10) ?? null) : 'never'}
-                warn={published.length === 0}
-              />
-              <Stat label="Requests waiting" value={`${openRequests.length}`} warn={openRequests.length > 0} />
-            </div>
+          <div className="stat-grid" style={{ marginBottom: 16 }}>
+            <Stat label="Open work" value={`${work.filter((w) => w.status !== 'done').length}`} />
+            <Stat label="Visible to them" value={`${visible.length} of ${work.length}`} />
+            <Stat
+              label="Last thing they saw finish"
+              value={lastSeen ? relativePhrase(lastSeen.slice(0, 10)) : 'nothing yet'}
+              warn={!lastSeen}
+            />
+            <Stat
+              label="Last update published"
+              value={published[0] ? relativePhrase(published[0].published_at?.slice(0, 10) ?? null) : 'never'}
+              warn={published.length === 0}
+            />
+            <Stat label="Requests waiting" value={`${openRequests.length}`} warn={openRequests.length > 0} />
           </div>
 
           {openRequests.length > 0 && (
-            <a href="/requests" className="flag flag--wait" style={{ marginTop: 12 }}>
+            <a href="/requests" className="flag flag--wait" style={{ marginBottom: 16 }}>
               <span className="flag__dot" />
               <span>
                 {openRequests.length} request{openRequests.length === 1 ? '' : 's'} from {client.name} waiting
@@ -133,11 +128,86 @@ export default async function ClientDetailPage({ params, searchParams }: {
               </span>
             </a>
           )}
+
+          <div className="grid-2">
+            <section>
+              <div className="section-label">
+                <span>Open work</span>
+                <a href={`/clients/${id}?tab=work`} className="tiny">All work</a>
+              </div>
+              <div className="card">
+                <div className="rows">
+                  {work.filter((w) => w.status !== 'done').slice(0, 8).map((item) => (
+                    <a
+                      key={item.id}
+                      href={`/work/${item.id}`}
+                      className="rows__row"
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontWeight: 500 }}>{item.title}</span>
+                        <span className="row tiny dim" style={{ gap: 6, marginTop: 2 }}>
+                          <StatusChip status={item.status} />
+                          {item.committed_date && (
+                            <span className="tag">Committed <span className="num">{shortDate(item.committed_date)}</span></span>
+                          )}
+                        </span>
+                      </span>
+                      <span className="small num dim">{hm(item.est_minutes ?? 0)}</span>
+                    </a>
+                  ))}
+                  {work.filter((w) => w.status !== 'done').length === 0 && (
+                    <div className="rows__row"><span className="small dim">Nothing open right now.</span></div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <div className="section-label">
+                <span>What they last read</span>
+                <a href={`/clients/${id}?tab=updates`} className="tiny">All updates</a>
+              </div>
+              {published[0] ? (
+                <a
+                  href={`/updates/${published[0].id}`}
+                  className="card"
+                  style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
+                >
+                  <div className="spread">
+                    <span className="small">
+                      <span className="num">{published[0].period_start}</span> to{' '}
+                      <span className="num">{published[0].period_end}</span>
+                    </span>
+                    <span className="chip chip--done">Published v{published[0].version}</span>
+                  </div>
+                  <p className="small dim" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
+                    {published[0].body_md.slice(0, 280)}{published[0].body_md.length > 280 ? '…' : ''}
+                  </p>
+                </a>
+              ) : (
+                <div className="card">
+                  <p className="muted">Nothing published yet.</p>
+                  <p className="tiny dim" style={{ marginTop: 6 }}>
+                    One is drafted every week from the work you actually completed — it becomes
+                    visible only when you approve it.
+                  </p>
+                </div>
+              )}
+
+              {drafts.length > 0 && (
+                <a href={`/updates/${drafts[0].id}`} className="flag flag--wait" style={{ marginTop: 12 }}>
+                  <span className="flag__dot" />
+                  <span>A drafted update is waiting for your approval.</span>
+                </a>
+              )}
+            </section>
+          </div>
         </>
       )}
 
       {tab === 'work' && (
-        <>
+        <div className="grid-2">
           {GROUPS.map(({ status, label }) => {
             const rows = work.filter((w) => w.status === status);
             if (rows.length === 0) return null;
@@ -149,27 +219,29 @@ export default async function ClientDetailPage({ params, searchParams }: {
                     {hm(rows.reduce((total, r) => total + (r.est_minutes ?? 0), 0))}
                   </span>
                 </div>
-                <div className="rows">
-                  {rows.map((item) => (
-                    <a
-                      key={item.id}
-                      href={`/work/${item.id}`}
-                      className="rows__row"
-                      style={{ color: 'inherit', textDecoration: 'none' }}
-                    >
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: 500 }}>{item.title}</span>
-                        <span className="row tiny dim" style={{ gap: 6, marginTop: 4 }}>
-                          <ModeChip mode={item.mode} />
-                          {!item.client_visible && <span className="tag">internal</span>}
-                          {item.committed_date && (
-                            <span className="tag">Committed <span className="num">{shortDate(item.committed_date)}</span></span>
-                          )}
+                <div className="card">
+                  <div className="rows">
+                    {rows.map((item) => (
+                      <a
+                        key={item.id}
+                        href={`/work/${item.id}`}
+                        className="rows__row"
+                        style={{ color: 'inherit', textDecoration: 'none' }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 500 }}>{item.title}</span>
+                          <span className="row tiny dim" style={{ gap: 6, marginTop: 4 }}>
+                            <ModeChip mode={item.mode} />
+                            {!item.client_visible && <span className="tag">internal</span>}
+                            {item.committed_date && (
+                              <span className="tag">Committed <span className="num">{shortDate(item.committed_date)}</span></span>
+                            )}
+                          </span>
                         </span>
-                      </span>
-                      <span className="small num dim">{hm(item.est_minutes ?? 0)}</span>
-                    </a>
-                  ))}
+                        <span className="small num dim">{hm(item.est_minutes ?? 0)}</span>
+                      </a>
+                    ))}
+                  </div>
                 </div>
               </section>
             );
@@ -177,7 +249,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
           {work.length === 0 && (
             <div className="card"><p className="muted">No work for {client.name} yet.</p></div>
           )}
-        </>
+        </div>
       )}
 
       {tab === 'requests' && (
@@ -264,9 +336,11 @@ export default async function ClientDetailPage({ params, searchParams }: {
 
 function Stat({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="rows__row">
-      <span className="small dim">{label}</span>
-      <span className="small num" style={{ color: warn ? 'var(--amber-deep)' : undefined }}>{value}</span>
+    <div className="stat">
+      <div className="stat__label">{label}</div>
+      <div className="stat__value" style={{ color: warn ? 'var(--amber-deep)' : undefined, fontSize: /\d/.test(value[0] ?? '') ? undefined : 16 }}>
+        {value}
+      </div>
     </div>
   );
 }

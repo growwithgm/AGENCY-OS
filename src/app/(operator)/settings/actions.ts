@@ -1,8 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireOperator } from '@/lib/auth';
+import { deleteLogin } from '@/lib/authFlow';
 import { replan } from '@/data/planning';
 import { refreshSignals } from '@/data/attention';
 import { recordAudit } from '@/lib/audit';
@@ -236,4 +238,60 @@ export async function setNotificationAction(kind: string, enabled: boolean) {
   if (error) throw new Error(error.message);
 
   revalidatePath('/settings');
+}
+
+/**
+ * Remove every client and everything that belongs to them.
+ *
+ * The nuclear option, asked for twice by name: both confirmation fields
+ * must read "remove data" before anything runs. What goes: every client,
+ * their logins (auth users deleted, so open portal sessions end), all
+ * work, requests, updates, drafts, plans, recorded effort, estimate
+ * history, signals and the activity log. What stays: you, your sign-in,
+ * and the shape of your day — zones, working hours, blackouts and
+ * notification settings survive, because they describe you, not a client.
+ */
+export async function removeAllDataAction(form: FormData) {
+  const { session, supabase } = await requireOperator();
+
+  const phrase = 'remove data';
+  const first = String(form.get('confirm_first') ?? '').trim().toLowerCase();
+  const second = String(form.get('confirm_second') ?? '').trim().toLowerCase();
+  if (first !== phrase || second !== phrase) {
+    throw new Error('Both confirmations must read exactly "remove data".');
+  }
+
+  // Client logins first: deleting the auth users ends every open portal
+  // session before the rows behind them disappear.
+  const { data: contacts } = await supabase.from('client_contacts').select('auth_user_id');
+  for (const contact of contacts ?? []) {
+    if (contact.auth_user_id) await deleteLogin(contact.auth_user_id);
+  }
+
+  // Children before parents; everything else cascades from clients/tasks.
+  // The filter is Supabase's "delete needs a where" requirement, shaped to
+  // match every row.
+  const wipe = [
+    'overrun_reasons', 'effort_records', 'estimate_history', 'schedule_blocks',
+    'plan_runs', 'task_dependencies', 'attention_signals', 'capture_drafts',
+    'client_requests', 'client_updates', 'tasks', 'recurrence_rules',
+    'projects', 'client_contacts', 'client_visibility', 'clients',
+    'activity_log', 'notification_log',
+  ];
+  for (const table of wipe) {
+    const { error } = await supabase.from(table).delete().not('id', 'is', null);
+    // client_visibility keys on client_id, not id.
+    if (error && table === 'client_visibility') {
+      await supabase.from(table).delete().not('client_id', 'is', null);
+    }
+  }
+
+  await recordAudit({
+    type: 'data_removed',
+    actor: session.email,
+    note: `all client data removed; ${contacts?.length ?? 0} portal logins deleted`,
+  });
+
+  revalidatePath('/');
+  redirect('/');
 }
