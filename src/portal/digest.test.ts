@@ -39,9 +39,11 @@ describe('building a digest', () => {
     expect(digest.sections).toHaveLength(0);
   });
 
-  it('writes in the client’s own language', () => {
-    const digest = buildDigest({ ...week, locale: 'es' });
-    expect(digest.sections.map((s) => s.label)).toEqual(['Completado', 'En curso', 'Aprobado y por hacer']);
+  it('labels its sections in plain English', () => {
+    const digest = buildDigest(week);
+    expect(digest.sections.map((s) => s.label)).toEqual([
+      'Completed', 'In progress', 'Approved and coming up',
+    ]);
   });
 });
 
@@ -71,8 +73,7 @@ describe('rendering a digest', () => {
     expect(body.trim().endsWith('https://example.com/portal')).toBe(true);
   });
 
-  it('subjects it in the client’s language', () => {
+  it('keeps a plain English subject', () => {
     expect(renderDigest(buildDigest(week), 'x').subject).toBe('Your week with us');
-    expect(renderDigest(buildDigest({ ...week, locale: 'es' }), 'x').subject).toBe('Tu semana con nosotros');
   });
 });

@@ -17,11 +17,10 @@ const NOTIFY = [
  * on this screen that ends someone's access.
  */
 export function ClientSettings({
-  clientId, clientName, locale, notifyMode, targetDays, status, contactCount,
+  clientId, clientName, notifyMode, targetDays, status, contactCount,
 }: {
   clientId: string;
   clientName: string;
-  locale: string;
   notifyMode: string;
   targetDays: number;
   status: string;
@@ -35,17 +34,6 @@ export function ClientSettings({
     <div className="stack">
       <form action={saveClientSettingsAction} className="card stack">
         <input type="hidden" name="client_id" value={clientId} />
-
-        <label className="field">
-          <span className="label">Their language</span>
-          <select name="locale" className="input" defaultValue={locale}>
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-          </select>
-          <span className="tiny dim">
-            Their portal and their updates are written in this. Nothing on your side changes.
-          </span>
-        </label>
 
         <div className="field">
           <span className="label">How they hear about new work</span>

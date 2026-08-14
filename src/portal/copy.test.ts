@@ -1,35 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { t } from './copy';
+import { COPY, t } from './copy';
 
 /**
- * The two dictionaries must stay the same shape: a key present in English
- * and missing in Spanish is a crash on a Spanish portal, found only by the
- * client who hits it.
+ * One language, by decision. These pin the request-flow strings the page
+ * depends on, and that t() — kept for old call sites — always answers with
+ * the same dictionary no matter what it is passed.
  */
-describe('portal dictionary', () => {
-  const en = t('en');
-  const es = t('es');
-
-  it('has identical keys in both languages', () => {
-    expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
-    expect(Object.keys(es.request).sort()).toEqual(Object.keys(en.request).sort());
+describe('portal copy', () => {
+  it('answers every caller with the same English dictionary', () => {
+    expect(t()).toBe(COPY);
+    expect(t('es')).toBe(COPY);
+    expect(t('anything')).toBe(COPY);
   });
 
-  it('keeps every request-flow string a string in both languages', () => {
-    for (const dict of [en.request, es.request]) {
-      for (const [key, value] of Object.entries(dict)) {
-        if (key === 'stepOf') continue;
-        expect(typeof value, key).toBe('string');
-        expect((value as string).length, key).toBeGreaterThan(0);
-      }
+  it('keeps every request-flow string present and non-empty', () => {
+    for (const [key, value] of Object.entries(COPY.request)) {
+      if (key === 'stepOf') continue;
+      expect(typeof value, key).toBe('string');
+      expect((value as string).length, key).toBeGreaterThan(0);
     }
-    expect(en.request.stepOf(1, 3)).toBe('1 of 3');
-    expect(es.request.stepOf(1, 3)).toBe('1 de 3');
+    expect(COPY.request.stepOf(1, 3)).toBe('1 of 3');
   });
 
   it('never mentions scheduling in the receipt — a request is not a commitment', () => {
-    for (const dict of [en.request, es.request]) {
-      expect(dict.receivedBody.toLowerCase()).not.toMatch(/scheduled for|programado para/);
-    }
+    expect(COPY.request.receivedBody.toLowerCase()).not.toMatch(/scheduled for/);
   });
 });

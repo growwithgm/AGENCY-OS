@@ -13,7 +13,7 @@ export type RateLimitVerdict = { allowed: boolean; message?: string };
 export function rateLimit(
   clientRequestsToday: number,
   ipRequestsToday: number,
-  locale = 'es',
+  locale = 'en',
 ): RateLimitVerdict {
   if (clientRequestsToday >= MAX_REQUESTS_PER_DAY || ipRequestsToday >= MAX_IP_REQUESTS_PER_DAY) {
     return {

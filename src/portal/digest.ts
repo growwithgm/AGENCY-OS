@@ -77,9 +77,7 @@ export function renderDigest(digest: Digest, portalUrl: string): { subject: stri
   lines.push(portalUrl);
 
   return {
-    subject: digest.locale === 'es'
-      ? `Tu semana con nosotros`
-      : `Your week with us`,
+    subject: 'Your week with us',
     body: lines.join('\n'),
   };
 }
@@ -112,7 +110,7 @@ export async function collectDigests(db: SupabaseClient, now = new Date()): Prom
     digests.push(buildDigest({
       clientId: client.id,
       clientName: client.name,
-      locale: (client.locale as Locale) ?? 'en',
+      locale: 'en',
       recipients: (contactsRes.data ?? []).map((c) => c.email),
       completed: work
         .filter((w) => w.status === 'done' && w.completed_at && w.completed_at >= weekAgo)

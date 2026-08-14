@@ -34,7 +34,7 @@ export async function draftUpdateAction(form: FormData) {
 
   const draft = await draftClientUpdate({
     clientName: client.name,
-    locale: (client.locale as 'en' | 'es') ?? 'en',
+    locale: 'en',
     periodStart: dateKey(periodStart),
     periodEnd: dateKey(periodEnd),
     completed: visible
@@ -103,7 +103,7 @@ export async function createClientAction(form: FormData) {
   const { data: created, error } = await supabase.from('clients').insert({
     name,
     brand_slug: slug,
-    locale: String(form.get('locale') ?? 'en'),
+    locale: 'en',
     status: 'active',
     color_index: (count ?? 0) % CLIENT_COLORS.length,
     notify_mode: 'digest',
@@ -132,7 +132,6 @@ export async function saveClientSettingsAction(form: FormData) {
   const targetDays = Math.min(Math.max(Number(form.get('target_days') ?? 3), 1), 30);
 
   await supabase.from('clients').update({
-    locale: String(form.get('locale') ?? 'en'),
     notify_mode: String(form.get('notify_mode') ?? 'digest'),
   }).eq('id', clientId);
 

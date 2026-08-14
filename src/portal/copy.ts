@@ -1,15 +1,12 @@
 /**
- * Client-facing wording, in the client's own language.
- *
- * A dictionary, not an i18n framework — there are two languages and a few
- * dozen strings, and a framework would be more machinery than the problem
- * deserves. Operator-side text is English only and never passes through
- * here.
+ * Client-facing wording. English only, by decision — one language means a
+ * missing translation can never take a page down, and every string lives
+ * here rather than scattered through the components.
  */
 
-export type Locale = 'en' | 'es';
+export type Locale = 'en';
 
-const EN = {
+export const COPY = {
   subtitle: 'Where your work with us stands today.',
   overToYou: 'Over to you',
   askedFor: 'Asked for',
@@ -38,6 +35,34 @@ const EN = {
     rejected: 'Not going ahead',
     expired: 'Closed',
   } as Record<string, string>)[state] ?? 'With us',
+  shell: {
+    portalTitle: 'Client portal',
+    workspace: 'Client workspace',
+    navOverview: 'Overview',
+    navTasks: 'Active work',
+    navAsk: 'Ask for something',
+    navHistory: 'History',
+    help: 'Need something? Ask below — every request reaches us straight away.',
+    statActive: 'In progress',
+    statWaiting: 'Waiting on you',
+    statOpenRequests: 'Open requests',
+    statCompleted: 'Completed',
+    activeTitle: 'Active work',
+    activeSub: 'What is moving right now, and what is queued next.',
+    askTitle: 'Ask us for something',
+    askSub: 'Tell us what you need in simple words.',
+    historyTitle: 'Completed work',
+    historySub: 'What has been finished for you.',
+    colTask: 'Task',
+    colCompleted: 'Completed',
+    colStatus: 'Status',
+    done: 'Done',
+    statusInProgress: 'In progress',
+    statusUpcoming: 'Queued',
+    statusWaiting: 'Waiting on you',
+    noneActive: 'Nothing is in progress or queued right now.',
+    noneCompleted: 'Nothing has been completed yet.',
+  },
   request: {
     close: 'Close',
     stepOf: (i: number, n: number) => `${i} of ${n}`,
@@ -56,57 +81,9 @@ const EN = {
     notCommitment:
       'This is a request, not a commitment. The agency will confirm what they can take on and when.',
   },
-};
+} as const;
 
-const ES: typeof EN = {
-  subtitle: 'Cómo va tu trabajo con nosotros.',
-  overToYou: 'Necesitamos algo de ti',
-  askedFor: 'Pedido',
-  askUs: 'Pídenos algo',
-  inProgress: 'En curso',
-  upcoming: 'Aprobado y por hacer',
-  completed: 'Completado',
-  nothingInProgress: 'Ahora mismo no hay nada en curso.',
-  nothingUpcoming: 'No hay nada en cola por el momento.',
-  nothingCompleted: 'Todavía no se ha completado nada.',
-  whatYouAsked: 'Lo que has pedido',
-  noRequests: 'Todavía no has pedido nada.',
-  latestUpdate: 'Tu última actualización',
-  noUpdate: 'Tu primera actualización aparecerá aquí.',
-  newLabel: 'Nuevo',
-  by: 'Para el',
-  today: 'Hoy',
-  yesterday: 'Ayer',
-  account: 'Tu cuenta',
-  signOut: 'Cerrar sesión',
-  daysAgo: (n: number) => `hace ${n} días`,
-  requestState: (state: string) => ({
-    clarifying: 'Tenemos una pregunta',
-    pending_approval: 'Con nosotros',
-    approved: 'Aprobado',
-    rejected: 'No seguimos adelante',
-    expired: 'Cerrado',
-  } as Record<string, string>)[state] ?? 'Con nosotros',
-  request: {
-    close: 'Cerrar',
-    stepOf: (i: number, n: number) => `${i} de ${n}`,
-    prompt: '¿Qué necesitas?',
-    promptHint: 'Cuéntanoslo con tus palabras. Después te haremos un par de preguntas breves.',
-    placeholder: 'Queremos empezar a vender a salones, no solo a clientes directos.',
-    answerLabel: 'Tu respuesta',
-    send: 'Enviar',
-    continue: 'Continuar',
-    sending: 'Enviando…',
-    received: 'Recibido',
-    receivedBody:
-      'Recibido — lo revisaremos. No se programa nada hasta que la agencia confirme qué '
-      + 'puede asumir y cuándo.',
-    backToPage: 'Volver a tu página',
-    notCommitment:
-      'Esto es una solicitud, no un compromiso. La agencia confirmará qué puede asumir y cuándo.',
-  },
-};
-
-export function t(locale: Locale) {
-  return locale === 'es' ? ES : EN;
+/** Kept for call sites that pass a locale; there is only English now. */
+export function t(_locale?: string) {
+  return COPY;
 }

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     const draft = await draftClientUpdate({
       clientName: client.name,
-      locale: (client.locale as 'en' | 'es') ?? 'en',
+      locale: 'en',
       periodStart: dateKey(periodStart),
       periodEnd: dateKey(now),
       completed: completed.map((w) => ({

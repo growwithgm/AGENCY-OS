@@ -89,14 +89,14 @@ export async function continueRequest(
   const transcript = [...((request.transcript ?? []) as { role: 'assistant' | 'user'; content: string }[])];
   if (answer) transcript.push({ role: 'user', content: answer.slice(0, 2000) });
 
-  const { data: client } = await db.from('clients').select('locale').eq('id', clientId).maybeSingle();
+
 
   const asked = request.questions_asked ?? 0;
   const next = await nextIntakeQuestion({
     rawInput: request.raw_input,
     answers: transcript,
     askedCount: asked,
-    locale: client?.locale ?? 'en',
+    locale: 'en',
   });
 
   if (next.done || asked >= MAX_QUESTIONS) {

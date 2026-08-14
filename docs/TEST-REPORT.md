@@ -340,3 +340,7 @@ rather than newly built.
 
 Both are seed-free runtime data on your Supabase, which this environment
 cannot reach — paste each into the Supabase SQL editor.
+
+> **Superseded (language):** the portal was later made English-only by
+> decision — the language setting and the Spanish dictionary were removed
+> entirely, so 2c and 5.5 no longer apply.

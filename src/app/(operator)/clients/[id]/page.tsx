@@ -323,7 +323,6 @@ export default async function ClientDetailPage({ params, searchParams }: {
         <ClientSettings
           clientId={client.id}
           clientName={client.name}
-          locale={client.locale ?? 'en'}
           notifyMode={client.notify_mode ?? 'digest'}
           targetDays={visibilityRes.data?.target_days ?? 3}
           status={client.status}

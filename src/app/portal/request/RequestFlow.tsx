@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { submitRequestAction, type RequestState } from './actions';
-import { t, type Locale } from '@/portal/copy';
+import { COPY } from '@/portal/copy';
 
 const MAX_STEPS = 3;
 
@@ -12,14 +12,9 @@ const MAX_STEPS = 3;
  * It never promises a date, never implies acceptance, and never shows the
  * word "scheduled". The last line is the whole contract — and all of it is
  * in the client's own language.
- *
- * Only the locale crosses the server→client boundary. The dictionary
- * carries functions (stepOf and friends), and a function handed across
- * that boundary is a serialisation error that takes the whole page down —
- * so the strings are looked up here, on the client, not passed in.
  */
-export function RequestFlow({ locale }: { locale: Locale }) {
-  const copy = t(locale).request;
+export function RequestFlow() {
+  const copy = COPY.request;
   const [state, action, pending] = useActionState<RequestState, FormData>(submitRequestAction, {});
 
   if (state.done) {

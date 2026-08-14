@@ -100,19 +100,9 @@ export default async function ClientsPage() {
           <span className="label">Name</span>
           <input name="name" required className="input" placeholder="ibBan" />
         </label>
-        <label className="field" style={{ flex: '1 1 120px' }}>
-          <span className="label">Their language</span>
-          <select name="locale" className="input" defaultValue="en">
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-          </select>
-        </label>
         <button type="submit" className="btn">Add</button>
       </form>
-      <p className="tiny dim" style={{ marginTop: 8 }}>
-        Their language decides what their portal and updates are written in. It changes
-        nothing on your side.
-      </p>
+
     </main>
   );
 }
