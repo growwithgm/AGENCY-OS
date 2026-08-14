@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { operatorOrNull } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * Speech to text for the assistant's microphone.
@@ -64,6 +65,18 @@ export async function POST(request: NextRequest) {
   upstream.set('model', 'whisper-large-v3');
   upstream.set('response_format', 'json');
 
+  // Transcription is AI spend like any other — it goes in the same ledger
+  // the usage panel reads. Best effort: a logging failure never blocks.
+  const t0 = Date.now();
+  const log = (ok: boolean, error?: string) =>
+    supabaseAdmin().from('ai_runs').insert({
+      kind: 'transcription',
+      model: 'whisper-large-v3',
+      latency_ms: Date.now() - t0,
+      ok,
+      error: error ?? null,
+    }).then(() => undefined, () => undefined);
+
   let response: Response;
   try {
     response = await fetch(url, {
@@ -72,15 +85,18 @@ export async function POST(request: NextRequest) {
       body: upstream,
     });
   } catch {
+    await log(false, 'unreachable');
     return NextResponse.json({ error: 'transcription_unreachable' }, { status: 502 });
   }
 
   if (!response.ok) {
+    await log(false, `status ${response.status}`);
     return NextResponse.json({ error: 'transcription_failed' }, { status: 502 });
   }
 
   const body = await response.json().catch(() => null) as { text?: unknown } | null;
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
 
+  await log(true);
   return NextResponse.json({ text });
 }

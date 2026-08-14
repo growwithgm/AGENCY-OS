@@ -15,6 +15,7 @@ import {
   type Actor,
 } from '@/data/activity';
 import { listWork } from '@/data/work';
+import { aiUsage, type AIUsage } from '@/data/aiUsage';
 import { PRIORITY_LABELS, STATUS_LABELS, type WorkStatus } from '@/data/types';
 import { clockTime, hm, relativePhrase, shortDate } from '@/lib/format';
 import { revertAction } from './actions';
@@ -83,9 +84,10 @@ export default async function ActivityPage({ searchParams }: {
   const { actor: requested } = await searchParams;
 
   const actor = FILTERS.find((f) => f.actor === requested)?.actor;
-  const [entries, work] = await Promise.all([
+  const [entries, work, usage] = await Promise.all([
     listActivity(supabase, { actor, limit: 100 }),
     listWork(supabase, { limit: 200 }),
+    aiUsage(supabase, 7),
   ]);
 
   const titleById = new Map(work.map((w) => [w.id, w.title]));
@@ -148,7 +150,75 @@ export default async function ActivityPage({ searchParams }: {
           <Entry key={entry.id} entry={entry} titleById={titleById} />
         ))}
       </div>
+
+      <AIUsagePanel usage={usage} />
     </main>
+  );
+}
+
+/**
+ * The week's AI spend, from the same ledger every model call writes to.
+ * Costs are estimates from src/ai/rates.ts — edit rates there, not here.
+ */
+function AIUsagePanel({ usage }: { usage: AIUsage }) {
+  const money = (v: number) => (v < 0.005 && v > 0 ? '<$0.01' : `$${v.toFixed(2)}`);
+
+  return (
+    <section style={{ marginTop: 26 }}>
+      <div className="section-label"><span>AI, the last {usage.days} days</span></div>
+      <div className="card">
+        {usage.rows.length === 0 ? (
+          <p className="muted">No AI calls in the last {usage.days} days.</p>
+        ) : (
+          <>
+            <div className="spread small" style={{ marginBottom: 10 }}>
+              <span>
+                <span className="num">{usage.totals.calls}</span> calls
+                {usage.totals.errors > 0 && (
+                  <span className="risk-text"> · {usage.totals.errors} failed</span>
+                )}
+              </span>
+              <span className="num">≈{money(usage.totals.estCostUSD)}</span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="small" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr className="tiny dim" style={{ textAlign: 'left' }}>
+                    <th style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>Job</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500 }}>Model</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Calls</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Errors</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Tokens in</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Tokens out</th>
+                    <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Avg ms</th>
+                    <th style={{ padding: '4px 0 4px 8px', fontWeight: 500, textAlign: 'right' }}>Est. cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.rows.map((row) => (
+                    <tr key={`${row.kind}-${row.model}`} style={{ borderTop: '1px solid var(--hairline)' }}>
+                      <td style={{ padding: '5px 8px 5px 0' }}>{row.kind.replace(/_/g, ' ')}</td>
+                      <td className="dim" style={{ padding: '5px 8px' }}>{row.model}</td>
+                      <td className="num" style={{ padding: '5px 8px', textAlign: 'right' }}>{row.calls}</td>
+                      <td className={row.errors ? 'num risk-text' : 'num dim'} style={{ padding: '5px 8px', textAlign: 'right' }}>{row.errors}</td>
+                      <td className="num dim" style={{ padding: '5px 8px', textAlign: 'right' }}>{row.inputTokens.toLocaleString('en-GB')}</td>
+                      <td className="num dim" style={{ padding: '5px 8px', textAlign: 'right' }}>{row.outputTokens.toLocaleString('en-GB')}</td>
+                      <td className="num dim" style={{ padding: '5px 8px', textAlign: 'right' }}>{row.avgLatencyMs.toLocaleString('en-GB')}</td>
+                      <td className="num" style={{ padding: '5px 0 5px 8px', textAlign: 'right' }}>{money(row.estCostUSD)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="tiny dim" style={{ marginTop: 8 }}>
+              Costs are estimates from the rate table in <span className="num">src/ai/rates.ts</span>;
+              reasoning tokens are billed as output tokens and counted as returned. Transcription is
+              billed per audio minute, so its cost is not estimated here.
+            </p>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
