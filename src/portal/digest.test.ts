@@ -77,3 +77,20 @@ describe('rendering a digest', () => {
     expect(renderDigest(buildDigest(week), 'x').subject).toBe('Your week with us');
   });
 });
+
+describe('digest idempotency key', () => {
+  it('is the same for every day of one ISO week', async () => {
+    const { weekKey } = await import('./digest');
+    // Mon 2026-08-10 through Sun 2026-08-16 are one ISO week.
+    expect(weekKey(new Date('2026-08-10T00:00:00Z'))).toBe(weekKey(new Date('2026-08-16T23:59:59Z')));
+  });
+
+  it('changes across the week boundary and the year boundary', async () => {
+    const { weekKey } = await import('./digest');
+    expect(weekKey(new Date('2026-08-16T23:59:59Z'))).not.toBe(weekKey(new Date('2026-08-17T00:00:00Z')));
+    // 2027-01-01 is a Friday: ISO says it belongs to 2026's final week — the
+    // key must follow ISO, not the calendar year, or the new-year digest
+    // would double-send.
+    expect(weekKey(new Date('2027-01-01T12:00:00Z'))).toBe(weekKey(new Date('2026-12-31T12:00:00Z')));
+  });
+});

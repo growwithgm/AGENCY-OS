@@ -127,14 +127,41 @@ export async function collectDigests(db: SupabaseClient, now = new Date()): Prom
   return digests;
 }
 
-/** Send one digest. Returns what happened, honestly. */
+/** ISO week key — the unit of digest idempotency: one email per client, per week. */
+export function weekKey(at: Date): string {
+  const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+/**
+ * Send one digest. Returns what happened, honestly.
+ *
+ * Idempotent per client per ISO week: the notification log is checked
+ * before sending, so a cron that fires twice — or a manual run on top of a
+ * scheduled one — cannot mail the same client the same week twice.
+ */
 export async function sendDigest(
   digest: Digest,
   portalUrl: string,
-): Promise<'sent' | 'skipped_empty' | 'skipped_no_recipients' | 'skipped_not_configured' | 'failed'> {
+  now = new Date(),
+): Promise<'sent' | 'skipped_empty' | 'skipped_no_recipients' | 'skipped_not_configured' | 'skipped_already_sent' | 'failed'> {
   if (digest.empty) return 'skipped_empty';
   if (digest.recipients.length === 0) return 'skipped_no_recipients';
   if (!emailConfigured()) return 'skipped_not_configured';
+
+  const dedupeKey = `client_digest:${digest.clientId}:${weekKey(now)}`;
+  const { data: already } = await supabaseAdmin().from('notification_log')
+    .select('id')
+    .eq('kind', 'client_digest')
+    .eq('dedupe_key', dedupeKey)
+    .gt('sent_count', 0)
+    .limit(1)
+    .maybeSingle();
+  if (already) return 'skipped_already_sent';
 
   const { subject, body } = renderDigest(digest, portalUrl);
 
@@ -161,6 +188,7 @@ export async function sendDigest(
     kind: 'client_digest',
     title: subject,
     body: `${digest.clientName} · ${digest.recipients.length} recipients`,
+    dedupe_key: dedupeKey,
     sent_count: digest.recipients.length,
   });
 

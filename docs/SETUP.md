@@ -151,7 +151,7 @@ what you can realistically deliver inside those hours, not the length of
 the window.
 
 **b. Clients** (`/clients`) — add your brands. Each gets a colour mark it
-keeps everywhere, and a language for their portal.
+keeps everywhere. The portal is in English for every client.
 
 **c. Logins** — open a client → **Portal access** → Create login. You get a
 generated password shown exactly once; hand it over however you like. They
@@ -191,6 +191,13 @@ The windows job is what makes notifications bearable: anything not urgent
 waits for the next window and arrives as a single message, and nothing at
 all is delivered during a peak zone. Calling it more often than the three
 windows is harmless — it only acts on what is due.
+
+**One clock.** Set `APP_TIMEZONE` *and* `TZ` to your timezone (e.g.
+`Asia/Karachi`) in the deployment's environment variables. The delivery
+windows read `APP_TIMEZONE`; the planner and everything that asks "what day
+is it" use the server's local clock, which `TZ` controls. Vercel servers
+run on UTC by default, so leaving these unset makes "today" flip at 05:00
+Karachi time and holds the 09:00 window until 14:00.
 
 ---
 

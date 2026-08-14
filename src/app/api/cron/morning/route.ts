@@ -54,9 +54,13 @@ export async function GET(request: NextRequest) {
     dedupeKey: unnotified.map((s) => s.id).sort().join(','),
   });
 
-  const result = { sent: outcome === 'sent' ? 1 : 0, failed: 0, held: outcome === 'held' };
+  const result = { outcome };
 
-  if (outcome === 'sent') {
+  // Stamp only what was genuinely handled: delivered to a device, or held
+  // in the queue that will deliver it at the next window. A skipped send —
+  // no devices, keys missing, everything failed — leaves the signals
+  // unstamped so tomorrow's run tries again instead of going silent.
+  if (outcome === 'sent' || outcome === 'held') {
     await db.from('attention_signals')
       .update({ notified_at: new Date().toISOString() })
       .in('id', unnotified.map((s) => s.id));

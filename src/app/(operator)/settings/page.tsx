@@ -14,6 +14,9 @@ import { hm, dateKey, shortDate, todayKey } from '@/lib/format';
 import { PRIORITY_LABELS } from '@/data/types';
 import { ModeChip } from '@/components/marks';
 import { MODES, MODE_MIN_MINUTES } from '@/engines/planner/types';
+import { TIMEZONE } from '@/push/windows';
+import { pushConfigured } from '@/lib/env';
+import { PushDevices } from './PushDevices';
 import { ZoneEditor } from './ZoneEditor';
 import { DangerZone } from './DangerZone';
 import { NotifySettings, type NotifyKind } from './NotifySettings';
@@ -335,7 +338,7 @@ export default async function SettingsPage({ searchParams }: {
         <div className="row" style={{ gap: 8, alignItems: 'baseline' }}>
           <span className="label">Delivery windows</span>
           {DELIVERY_WINDOWS.map((time) => <span key={time} className="chip num">{time}</span>)}
-          <span className="tiny dim">Asia/Karachi</span>
+          <span className="tiny dim">{TIMEZONE}</span>
         </div>
 
         <p className="small muted" style={{ marginTop: 8, maxWidth: '68ch' }}>
@@ -358,6 +361,13 @@ export default async function SettingsPage({ searchParams }: {
             That list is a rule, not a preference: those two are the only things worth taking you
             out of your work for, so they are not switchable.
           </p>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--hairline)', marginTop: 14, paddingTop: 12 }}>
+          <div className="label" style={{ marginBottom: 6 }}>Devices</div>
+          <div className="rows">
+            <PushDevices vapidPublicKey={pushConfigured() ? process.env.VAPID_PUBLIC_KEY ?? null : null} />
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid var(--hairline)', marginTop: 14, paddingTop: 4 }}>

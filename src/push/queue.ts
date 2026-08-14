@@ -44,16 +44,24 @@ export type QueueInput = {
 
 /**
  * Send now if the rules allow it, otherwise hold it for the next window.
- * The caller never has to know which happened.
+ *
+ * The answer is honest: 'sent' only when a device actually received the
+ * push. No devices, keys missing, disabled in settings, or every send
+ * failing all come back as 'skipped' — so a caller stamping "the operator
+ * has been told" never stamps a message nobody got.
  */
-export async function notify(input: QueueInput, at = new Date()): Promise<'sent' | 'held'> {
+export async function notify(input: QueueInput, at = new Date()): Promise<'sent' | 'held' | 'skipped'> {
   const decision = decide(at, input.urgency, await zones(), {
     peakBlackout: await peakBlackoutEnabled(),
   });
 
   if (decision.deliver) {
-    await sendPush(input.kind, input.payload, { dedupeKey: input.dedupeKey });
-    return 'sent';
+    const result = await sendPush(input.kind, input.payload, { dedupeKey: input.dedupeKey });
+    if (result.sent > 0) return 'sent';
+    // 'already notified' means an earlier send genuinely went out — for the
+    // caller that is the same fact as 'sent': the operator has been told.
+    if (result.skipped === 'already notified') return 'sent';
+    return 'skipped';
   }
 
   await supabaseAdmin().from('notification_queue').insert({

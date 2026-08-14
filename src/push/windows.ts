@@ -18,7 +18,15 @@
  */
 
 export const DELIVERY_WINDOWS = [9 * 60, 13 * 60, 18 * 60];   // minutes past midnight
-export const TIMEZONE = 'Asia/Karachi';
+
+/**
+ * The operator's timezone — one clock for the whole product.
+ *
+ * The delivery windows obey APP_TIMEZONE; the planner runs on the server's
+ * local clock, so deploy with TZ set to the same value (see .env.example).
+ * Two clocks that disagree would deliver a "morning" digest mid-afternoon.
+ */
+export const TIMEZONE = process.env.APP_TIMEZONE?.trim() || 'Asia/Karachi';
 
 export type Zone = { start_time: string; end_time: string; name: string; weekday: number };
 
