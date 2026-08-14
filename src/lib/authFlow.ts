@@ -152,14 +152,13 @@ export async function requestPasswordReset(emailInput: string, ip: string | null
 
 /**
  * Unambiguous alphabet: no 0/O, 1/l/I, or shapes that die in a WhatsApp
- * message. Grouped like Xk7t-mQ2p-9rTf-Wd4z for reading aloud.
+ * message. One plain run of fourteen characters — no separators, so it can
+ * be typed exactly as it is read.
  */
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyzACDEFHJKLMNPQRSTUVWXYZ23456789';
 
 export function generatePassword(): string {
-  const group = () =>
-    Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
-  return `${group()}-${group()}-${group()}-${group()}`;
+  return Array.from({ length: 14 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
 }
 
 export type CreatedLogin = { password: string; userId: string };

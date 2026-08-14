@@ -14,6 +14,7 @@
 import { requireClient } from '@/lib/auth';
 import { COPY } from '@/portal/copy';
 import { RequestFlow } from './request/RequestFlow';
+import { answerFollowUpAction } from './request/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,7 @@ export default async function PortalHome() {
       .order('published_at', { ascending: false })
       .limit(12),
     supabase.from('client_request_status')
-      .select('id, state, title, note, created_at')
+      .select('id, state, title, note, question, created_at')
       .order('created_at', { ascending: false })
       .limit(8),
     supabase.from('client_profile').select('name').maybeSingle(),
@@ -62,7 +63,8 @@ export default async function PortalHome() {
   const upcoming = work.filter((w) => w.client_status === 'upcoming');
 
   const requests = (requestsRes.data ?? []) as {
-    id: string; state: string; title: string; note: string | null; created_at: string;
+    id: string; state: string; title: string; note: string | null;
+    question: string | null; created_at: string;
   }[];
   const openRequests = requests.filter(
     (r) => r.state === 'pending_approval' || r.state === 'clarifying',
@@ -222,14 +224,41 @@ export default async function PortalHome() {
                   <div className="cp-requests">
                     <div className="cp-requests-label">{say.whatYouAsked}</div>
                     {requests.map((request) => (
-                      <div key={request.id} className="cp-request-row">
-                        <span className="cp-request-title">{request.title}</span>
-                        <span className={
-                          request.state === 'pending_approval' || request.state === 'clarifying'
-                            ? 'portal-status--pending' : 'portal-status'
-                        }>
-                          {say.requestState(request.state)}
-                        </span>
+                      <div key={request.id} className="cp-request-row" style={{ display: 'block' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span className="cp-request-title">{request.title}</span>
+                          <span className={
+                            request.state === 'pending_approval' || request.state === 'clarifying'
+                              ? 'portal-status--pending' : 'portal-status'
+                          }>
+                            {say.requestState(request.state)}
+                          </span>
+                        </div>
+                        {request.note && (
+                          <div className="cp-helper" style={{ fontStyle: 'italic' }}>“{request.note}”</div>
+                        )}
+                        {/* The operator's question, answered right here. */}
+                        {request.state === 'clarifying' && request.question && (
+                          <div className="cp-question">
+                            <div className="cp-question-label">{say.request.weHaveAQuestion}</div>
+                            <div style={{ fontSize: 13.5, marginBottom: 8 }}>{request.question}</div>
+                            <form action={answerFollowUpAction}>
+                              <input type="hidden" name="request_id" value={request.id} />
+                              <label className="sr-only" htmlFor={`answer-${request.id}`}>
+                                {say.request.answerLabel}
+                              </label>
+                              <textarea
+                                id={`answer-${request.id}`}
+                                name="answer"
+                                required
+                                rows={2}
+                                className="input"
+                                style={{ marginBottom: 8 }}
+                              />
+                              <button type="submit" className="cp-submit">{say.request.send}</button>
+                            </form>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

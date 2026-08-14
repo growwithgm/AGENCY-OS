@@ -66,12 +66,24 @@ export const COPY = {
   request: {
     close: 'Close',
     stepOf: (i: number, n: number) => `${i} of ${n}`,
+    titleLabel: 'Task title',
+    titlePlaceholder: 'e.g. Create new Meta campaign',
     prompt: 'What do you need?',
-    promptHint: 'Tell us in your own words. We’ll ask a couple of short questions after this.',
-    placeholder: 'We want to start selling to salons, not just direct customers.',
+    detailPlaceholder: 'Explain the task, links, requirements or anything we should know…',
+    detailHelper: 'You do not need to write a formal brief.',
+    urgencyLabel: 'How urgent is this for you?',
+    urgencyNormal: 'Normal',
+    urgencyHigh: 'High',
+    urgencyUrgent: 'Urgent',
+    neededByLabel: 'Needed by',
+    neededByHelper: 'The date you are hoping for — we will confirm what is realistic.',
+    serviceLabel: 'Service area',
+    servicePlaceholder: 'Select service',
+    referenceLabel: 'Reference link',
+    referencePlaceholder: 'Paste a Drive, product or page link',
+    submit: 'Submit request',
     answerLabel: 'Your answer',
     send: 'Send',
-    continue: 'Continue',
     sending: 'Sending…',
     received: 'Received',
     receivedBody:
@@ -80,6 +92,7 @@ export const COPY = {
     backToPage: 'Back to your page',
     notCommitment:
       'This is a request, not a commitment. The agency will confirm what they can take on and when.',
+    weHaveAQuestion: 'We have a question',
   },
 } as const;
 

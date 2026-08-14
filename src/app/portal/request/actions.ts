@@ -3,16 +3,14 @@
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { requireClient } from '@/lib/auth';
-import { continueRequest, startRequest, type IntakeStep } from '@/portal/requestFlow';
+import {
+  submitStructuredRequest,
+  answerFollowUp,
+  type Urgency,
+  URGENCY_CHOICES,
+} from '@/portal/requestFlow';
 
-export type RequestState = {
-  requestId?: string;
-  question?: string;
-  hint?: string;
-  index?: number;
-  done?: boolean;
-  error?: string;
-};
+export type RequestState = { done?: boolean; error?: string };
 
 async function callerIp(): Promise<string | null> {
   const h = await headers();
@@ -20,37 +18,48 @@ async function callerIp(): Promise<string | null> {
   return forwarded ? forwarded.split(',')[0].trim() : h.get('x-real-ip');
 }
 
-function toState(step: IntakeStep): RequestState {
-  if (step.stage === 'error') return { error: step.message };
-  if (step.stage === 'received') return { requestId: step.requestId, done: true };
-  return {
-    requestId: step.requestId,
-    question: step.question,
-    hint: step.hint,
-    index: step.index,
-  };
-}
-
 /**
- * One step of the intake conversation.
- * The session decides which client this belongs to — the form never does.
+ * One page, one submission. The session decides whose request this is;
+ * nothing in the form can say otherwise (INV-3, and the write-path note in
+ * requestFlow.ts).
  */
 export async function submitRequestAction(
   _prev: RequestState,
   form: FormData,
 ): Promise<RequestState> {
-  // Re-checks the session: a server action is reachable by direct POST.
   const { session } = await requireClient();
 
-  const text = String(form.get('text') ?? '').trim();
-  const requestId = String(form.get('request_id') ?? '');
+  const urgencyRaw = String(form.get('urgency') ?? '');
+  const result = await submitStructuredRequest(
+    session.clientId,
+    {
+      title: String(form.get('title') ?? ''),
+      detail: String(form.get('detail') ?? ''),
+      urgency: (URGENCY_CHOICES as readonly string[]).includes(urgencyRaw)
+        ? (urgencyRaw as Urgency)
+        : null,
+      neededBy: String(form.get('needed_by') ?? '') || null,
+      serviceArea: String(form.get('service_area') ?? '') || null,
+      reference: String(form.get('reference') ?? '') || null,
+    },
+    await callerIp(),
+  );
 
-  if (!text) return { requestId, error: 'Please write something first.' };
-
-  const step = requestId
-    ? await continueRequest(session.clientId, requestId, text)
-    : await startRequest(session.clientId, text, await callerIp());
+  if (!result.ok) return { error: result.message };
 
   revalidatePath('/portal');
-  return toState(step);
+  return { done: true };
+}
+
+/** Answer the operator's follow-up, straight from the portal page. */
+export async function answerFollowUpAction(form: FormData): Promise<void> {
+  const { session } = await requireClient();
+
+  await answerFollowUp(
+    session.clientId,
+    String(form.get('request_id') ?? ''),
+    String(form.get('answer') ?? ''),
+  );
+
+  revalidatePath('/portal');
 }

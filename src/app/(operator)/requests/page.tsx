@@ -119,8 +119,10 @@ export default async function RequestsPage() {
             <span>Waiting on you</span>
             <span className="num muted">{waitingOnYou.length}</span>
           </div>
-          <div className="rows">
-            {waitingOnYou.map((request) => <Row key={request.id} request={request} />)}
+          <div className="card">
+            <div className="rows">
+              {waitingOnYou.map((request) => <Row key={request.id} request={request} />)}
+            </div>
           </div>
         </>
       )}
@@ -131,8 +133,10 @@ export default async function RequestsPage() {
             <span>Waiting on them</span>
             <span className="num muted">{waitingOnThem.length}</span>
           </div>
-          <div className="rows">
-            {waitingOnThem.map((request) => <Row key={request.id} request={request} />)}
+          <div className="card">
+            <div className="rows">
+              {waitingOnThem.map((request) => <Row key={request.id} request={request} />)}
+            </div>
           </div>
           <p className="tiny dim" style={{ marginTop: 6 }}>
             You asked these clients a question. They come back here once answered.
@@ -146,8 +150,10 @@ export default async function RequestsPage() {
             <span>Decided</span>
             <span className="num muted">{decided.length}</span>
           </div>
-          <div className="rows">
-            {decided.map((request) => <Row key={request.id} request={request} />)}
+          <div className="card">
+            <div className="rows">
+              {decided.map((request) => <Row key={request.id} request={request} />)}
+            </div>
           </div>
         </>
       )}

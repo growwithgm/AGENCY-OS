@@ -1,138 +1,165 @@
 /**
- * Portal request intake.
+ * Portal request intake — one page, one submission.
  *
  * A request never becomes work here (INV-3). The client's own words are
- * kept verbatim for the operator to read, their stated urgency is recorded
- * as information rather than priority (INV-1), and the flow never says a
- * date, a promise or the word "scheduled".
+ * kept verbatim for the operator to read; their stated urgency is recorded
+ * as information rather than priority (INV-1); their "needed by" date is
+ * recorded as what they asked for, never as a promise (INV-6). The flow
+ * never says a date back, and never says the word "scheduled".
  *
  * On privilege: portal *reads* go through the client's own session and the
- * portal projections. This one write path uses the service-role client
- * instead, because the client role deliberately has no insert or update
- * policy on client_requests — a client must never be able to write a
- * request for another client, or move their own to approved. Every call
- * here takes `clientId` from the validated session and scopes on it; the
- * form cannot supply it.
+ * portal projections. This write path uses the service-role client instead,
+ * because the client role deliberately has no insert or update policy on
+ * client_requests — a client must never be able to write a request for
+ * another client, or move their own to approved. Every call here takes
+ * `clientId` from the validated session and scopes on it; the form cannot
+ * supply it.
  */
 
 import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { nextIntakeQuestion, MAX_QUESTIONS } from '@/ai/jobs/clientIntake';
 import { rateLimit, hashIdentifier } from '@/lib/rateLimit';
-import { MAX_REQUESTS_PER_DAY, MAX_IP_REQUESTS_PER_DAY } from './requestPolicy';
+import {
+  MAX_REQUESTS_PER_DAY, MAX_IP_REQUESTS_PER_DAY,
+  URGENCY_CHOICES, SERVICE_AREAS, type Urgency,
+} from './requestPolicy';
 
-export { RECEIVED_MESSAGE } from './messages';
+export { URGENCY_CHOICES, SERVICE_AREAS, type Urgency };
 
 const DAY_SECONDS = 86_400;
 
-export type IntakeStep =
-  | { stage: 'question'; requestId: string; question: string; hint?: string; index: number }
-  | { stage: 'received'; requestId: string }
-  | { stage: 'error'; message: string };
+export type StructuredRequest = {
+  title: string;
+  detail: string;
+  urgency: Urgency | null;
+  neededBy: string | null;      // YYYY-MM-DD, as asked for — not a promise
+  serviceArea: string | null;
+  reference: string | null;     // a link or note, kept as data
+};
 
-export async function startRequest(
+export type SubmitResult =
+  | { ok: true; requestId: string }
+  | { ok: false; message: string };
+
+/** A real calendar date, today or later. Anything else becomes null. */
+function cleanDate(value: string | null): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = Date.parse(`${value}T00:00:00`);
+  if (Number.isNaN(parsed)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return parsed >= today.getTime() ? value : null;
+}
+
+export async function submitStructuredRequest(
   clientId: string,
-  rawInput: string,
+  input: StructuredRequest,
   ip: string | null,
-): Promise<IntakeStep> {
+): Promise<SubmitResult> {
   const db = supabaseAdmin();
 
   const byClient = await rateLimit('client_request', hashIdentifier(clientId), MAX_REQUESTS_PER_DAY, DAY_SECONDS);
   if (!byClient.allowed) {
     return {
-      stage: 'error',
+      ok: false,
       message: "You've reached today's limit for new requests. Please try again tomorrow, or email us.",
     };
   }
-
   if (ip) {
     const byIp = await rateLimit('client_request_ip', hashIdentifier(ip), MAX_IP_REQUESTS_PER_DAY, DAY_SECONDS);
     if (!byIp.allowed) {
-      return { stage: 'error', message: "You've reached today's limit for new requests." };
+      return { ok: false, message: "You've reached today's limit for new requests." };
     }
   }
+
+  const detail = input.detail.trim().slice(0, 4000);
+  if (!detail) return { ok: false, message: 'Tell us what you need first.' };
+
+  const title = input.title.trim().slice(0, 80) || detail.slice(0, 80);
+  const urgency = input.urgency && URGENCY_CHOICES.includes(input.urgency) ? input.urgency : null;
+  const neededBy = cleanDate(input.neededBy);
+  const serviceArea = input.serviceArea && (SERVICE_AREAS as readonly string[]).includes(input.serviceArea)
+    ? input.serviceArea
+    : null;
+  const reference = input.reference?.trim().slice(0, 500) || null;
+
+  // Their words, verbatim, in one readable block — this is what the
+  // operator quotes. Data, never instructions.
+  const rawInput = [
+    title !== detail.slice(0, 80) ? title : null,
+    detail,
+    reference ? `Reference: ${reference}` : null,
+  ].filter(Boolean).join('\n\n');
 
   const { data, error } = await db.from('client_requests').insert({
     // Always from the session, never from the form.
     client_id: clientId,
     raw_input: rawInput.slice(0, 4000),
-    state: 'clarifying',
-    draft: { title: rawInput.slice(0, 80), detail: rawInput.slice(0, 4000) },
+    state: 'pending_approval',
+    draft: {
+      title,
+      detail,
+      stated_urgency: urgency,
+      requested_date: neededBy,
+      service_area: serviceArea,
+      reference,
+    },
     ip_hash: ip ? createHash('sha256').update(ip).digest('hex').slice(0, 32) : null,
   }).select('id').single();
 
-  if (error) return { stage: 'error', message: 'Something went wrong. Please try again.' };
+  if (error) return { ok: false, message: 'Something went wrong. Please try again.' };
 
-  return continueRequest(clientId, data.id, null);
+  // Best effort: the operator is told, but a failed notification must
+  // never lose the request.
+  await notifyOperator(data.id).catch(() => {});
+
+  return { ok: true, requestId: data.id };
 }
 
-export async function continueRequest(
+/**
+ * Answer the operator's open follow-up question, from the portal page.
+ * The answer joins the transcript and the request returns to the
+ * operator's queue.
+ */
+export async function answerFollowUp(
   clientId: string,
   requestId: string,
-  answer: string | null,
-): Promise<IntakeStep> {
+  answer: string,
+): Promise<SubmitResult> {
   const db = supabaseAdmin();
+  const text = answer.trim().slice(0, 2000);
+  if (!text) return { ok: false, message: 'Write an answer first.' };
 
   const { data: request } = await db.from('client_requests')
-    .select('id, client_id, raw_input, transcript, questions_asked, state, draft')
+    .select('id, client_id, state, transcript, draft')
     .eq('id', requestId)
     .maybeSingle();
 
-  // A client can only ever touch their own request.
+  // A client can only ever touch their own request, and only while it is
+  // actually back with them.
   if (!request || request.client_id !== clientId) {
-    return { stage: 'error', message: 'That request could not be found.' };
+    return { ok: false, message: 'That request could not be found.' };
   }
   if (request.state !== 'clarifying') {
-    return { stage: 'received', requestId };
+    return { ok: true, requestId };
   }
 
-  const transcript = [...((request.transcript ?? []) as { role: 'assistant' | 'user'; content: string }[])];
-  if (answer) transcript.push({ role: 'user', content: answer.slice(0, 2000) });
+  const transcript = [
+    ...((request.transcript ?? []) as { role: 'assistant' | 'user'; content: string }[]),
+    { role: 'user' as const, content: text },
+  ];
 
-
-
-  const asked = request.questions_asked ?? 0;
-  const next = await nextIntakeQuestion({
-    rawInput: request.raw_input,
-    answers: transcript,
-    askedCount: asked,
-    locale: 'en',
-  });
-
-  if (next.done || asked >= MAX_QUESTIONS) {
-    const answers = transcript.filter((t) => t.role === 'user').map((t) => t.content);
-    await db.from('client_requests').update({
-      state: 'pending_approval',
-      transcript,
-      questions_asked: asked,
-      draft: {
-        ...(request.draft ?? {}),
-        detail: [request.raw_input, ...answers].join('\n\n'),
-      },
-      updated_at: new Date().toISOString(),
-    }).eq('id', requestId);
-
-    // Best effort: the operator is told, but a failed notification must
-    // never lose the request.
-    await notifyOperator(requestId).catch(() => {});
-
-    return { stage: 'received', requestId };
-  }
-
-  transcript.push({ role: 'assistant', content: next.question });
+  const draft = (request.draft ?? {}) as { detail?: string };
   await db.from('client_requests').update({
+    state: 'pending_approval',
     transcript,
-    questions_asked: asked + 1,
+    draft: { ...draft, detail: [draft.detail, text].filter(Boolean).join('\n\n') },
     updated_at: new Date().toISOString(),
   }).eq('id', requestId);
 
-  return {
-    stage: 'question',
-    requestId,
-    question: next.question,
-    hint: next.hint,
-    index: asked + 1,
-  };
+  await notifyOperator(requestId).catch(() => {});
+
+  return { ok: true, requestId };
 }
 
 async function notifyOperator(requestId: string): Promise<void> {

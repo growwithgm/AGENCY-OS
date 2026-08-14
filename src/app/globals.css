@@ -1162,6 +1162,56 @@ body:has(.cp-app) { background: var(--ground-portal); }
 
 .cp-form { padding: 20px; }
 
+.cp-field { margin-bottom: 15px; }
+.cp-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--portal-soft);
+  margin-bottom: 7px;
+}
+.cp-field .input { border-color: #c6cede; border-radius: 10px; }
+.cp-field .input:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(44, 62, 112, .1); }
+
+.cp-helper { font-size: 11.5px; color: var(--portal-mut); margin-top: 5px; line-height: 1.5; }
+
+.cp-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+@media (max-width: 560px) { .cp-row2 { grid-template-columns: 1fr; } }
+
+.cp-submit {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  padding: 13px 15px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 46px;
+}
+.cp-submit:hover { background: #24335d; }
+.cp-submit:disabled { opacity: .6; cursor: not-allowed; }
+
+/* The operator's open question, answered right on the page. */
+.cp-question {
+  background: var(--sand);
+  border: 1px solid var(--sand-line);
+  border-radius: 10px;
+  padding: 12px 13px;
+  margin-top: 8px;
+}
+.cp-question-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--amber-deep);
+  margin-bottom: 4px;
+}
+
 .cp-notice {
   margin: 0 20px 20px;
   padding: 13px;

@@ -253,9 +253,10 @@ export default async function ClientDetailPage({ params, searchParams }: {
       )}
 
       {tab === 'requests' && (
-        <div className="rows">
+        <div className="card" style={{ maxWidth: 900 }}>
+          <div className="rows">
           {requests.length === 0 && (
-            <div className="card"><p className="muted">{client.name} has not asked for anything yet.</p></div>
+            <p className="muted">{client.name} has not asked for anything yet.</p>
           )}
           {requests.map((request) => (
             <a
@@ -273,6 +274,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
               <span className="chip chip--pending">{request.state.replace('_', ' ')}</span>
             </a>
           ))}
+          </div>
         </div>
       )}
 

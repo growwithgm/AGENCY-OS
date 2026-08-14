@@ -52,6 +52,7 @@ export function PortalAccess({ clientId, clientName, contacts }: {
         <p className="small" style={{ color: 'var(--risk)', marginBottom: 10 }}>{error.message}</p>
       )}
 
+      <div className="card">
       <div className="rows">
         {contacts.length === 0 && (
           <div className="rows__row">
@@ -108,6 +109,7 @@ export function PortalAccess({ clientId, clientName, contacts }: {
             )}
           </div>
         ))}
+      </div>
       </div>
 
       <form action={createSubmit} className="stack" style={{ marginTop: 12 }}>

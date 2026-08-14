@@ -220,6 +220,9 @@ export default async function RequestDetailPage({ params, searchParams }: {
         {request.draft?.stated_urgency && (
           <span className="tag tag--info">they said: {request.draft.stated_urgency}</span>
         )}
+        {request.draft?.service_area && (
+          <span className="tag">{request.draft.service_area}</span>
+        )}
         {requestedDate && (
           <span className="tag tag--info">
             asked for <span className="num">{shortDate(requestedDate)}</span>
@@ -258,6 +261,13 @@ export default async function RequestDetailPage({ params, searchParams }: {
           here sets it for you.
         </p>
       </section>
+
+      {request.draft?.reference && (
+        <p className="small" style={{ marginTop: 8 }}>
+          <span className="tiny dim" style={{ marginRight: 6 }}>Their reference:</span>
+          <span style={{ overflowWrap: 'anywhere' }}>{request.draft.reference}</span>
+        </p>
+      )}
 
       {/* ── 2 · The exchange ── */}
       <div className="section-label"><span>2 · Questions and answers</span></div>

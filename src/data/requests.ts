@@ -23,6 +23,8 @@ export type ClientRequest = {
     stated_urgency?: string | null;
     requested_date?: string | null;
     materials?: string | null;
+    service_area?: string | null;
+    reference?: string | null;
   } | null;
   transcript: { role: 'assistant' | 'user'; content: string }[];
   questions_asked: number;

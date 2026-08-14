@@ -28,6 +28,22 @@ export function rateLimit(
 
 export type RequestState = 'clarifying' | 'pending_approval' | 'approved' | 'rejected' | 'expired';
 
+/** What the client may say about urgency. Information, never priority (INV-1). */
+export const URGENCY_CHOICES = ['normal', 'high', 'urgent'] as const;
+export type Urgency = (typeof URGENCY_CHOICES)[number];
+
+/** The service families the request form offers. Free text never becomes one. */
+export const SERVICE_AREAS = [
+  'Meta Ads',
+  'Google Ads',
+  'TikTok',
+  'Shopify / Website',
+  'Creative / UGC',
+  'Email / Retention',
+  'Shipping / Operations',
+  'Other',
+] as const;
+
 /**
  * The AI may say it has enough ("done"), but the question budget is a hard
  * ceiling the AI cannot talk its way past.
