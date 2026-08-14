@@ -93,6 +93,9 @@ export const COPY = {
     notCommitment:
       'This is a request, not a commitment. The agency will confirm what they can take on and when.',
     weHaveAQuestion: 'We have a question',
+    questionHelper:
+      'Your request is already with us — answering just adds the detail. You can also answer '
+      + 'later from your page, or leave it.',
   },
 } as const;
 

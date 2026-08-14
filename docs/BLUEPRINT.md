@@ -192,9 +192,12 @@ an interruption there destroys more than it saves.
 ## 9. When the AI is down
 
 Every AI job has a deterministic fallback and says so on screen where it
-matters. Capture becomes a structured form. The assistant becomes a button
-panel running the same tools with no prose. The briefing becomes the facts
-without narration. No page fails because a provider is unavailable.
+matters. Capture becomes a structured form. The briefing becomes the facts
+without narration. The assistant is the one deliberately AI-only surface —
+the product is AI-based by decision, so a failed turn shows as a plain
+"that didn't work, try again" note in the conversation rather than a
+different interface; every fact it would have narrated is still on the
+screens themselves. No page fails because a provider is unavailable.
 
 ---
 

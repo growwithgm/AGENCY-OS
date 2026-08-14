@@ -418,6 +418,18 @@ export const TOOL_SCHEMAS: Record<string, Schema> = {
       required: ['work_id'],
     },
   },
+  get_workload_advice: {
+    description: 'A considered reading of the operator’s workload question over this week’s computed numbers. The figures come back too — quote them, not your memory.',
+    parameters: {
+      type: 'object',
+      properties: { question: { type: 'string', description: 'The operator’s question, verbatim' } },
+      required: ['question'],
+    },
+  },
+  get_estimate_insight: {
+    description: 'A reading of estimate accuracy: which kinds of work overrun, which are reliable, from the recorded history.',
+    parameters: { type: 'object', properties: {} },
+  },
 };
 
 /** What the model is offered. CONFIRM names are structurally absent. */
@@ -734,6 +746,8 @@ export async function runTool(
       case 'regenerate_report_draft': return await reportDraft(ctx, String(args.client ?? ''), true);
       case 'create_touchpoint': return await createTouchpoint(ctx, args);
       case 'apply_estimate_suggestion': return await applyEstimateSuggestion(ctx, String(args.work_id ?? ''));
+      case 'get_workload_advice': return await workloadAdvice(ctx, String(args.question ?? ''));
+      case 'get_estimate_insight': return await estimateInsightTool(ctx);
       default:
         return { ok: false, refused: `${name} is not implemented yet.` };
     }
@@ -1684,6 +1698,73 @@ async function applyEstimateSuggestion(ctx: ToolContext, workId: string): Promis
       based_on: `${distribution.samples} completed ${distribution.label} jobs (fastest ${hm(distribution.fastest)}, slowest ${hm(distribution.slowest)})`,
     },
     undo: { taskId: workId, before: { estMinutes: before.est_minutes } },
+  };
+}
+
+async function workloadAdvice(ctx: ToolContext, question: string): Promise<ToolResult> {
+  if (!question.trim()) return { ok: false, refused: 'What is the question?' };
+
+  const [{ askAdvice }, review, view] = await Promise.all([
+    import('@/ai/jobs/askAdvice'),
+    weeklyReview(ctx.db, ctx.now),
+    todayView(ctx.db, ctx.now),
+  ]);
+
+  const facts = {
+    today: {
+      date: view.date,
+      available_minutes: view.availableMinutes,
+      planned_minutes: view.plannedMinutes,
+      items: view.items.length,
+    },
+    week: {
+      commitments: review.commitments,
+      hours_by_mode: review.hoursByMode,
+      hours_by_client: review.hoursByClient.map(({ client, minutes }) => ({ client, minutes })),
+      peak: review.peak,
+      estimates: review.estimates,
+      slipped: review.slipped,
+    },
+  };
+
+  const advice = await askAdvice(question, facts);
+  return {
+    ok: true,
+    data: {
+      // The figures always come back; the prose is narration over them.
+      facts,
+      advice: advice ?? 'No narration available — the figures above are the answer.',
+    },
+  };
+}
+
+async function estimateInsightTool(ctx: ToolContext): Promise<ToolResult> {
+  const [{ estimateInsight }, review] = await Promise.all([
+    import('@/ai/jobs/estimateInsight'),
+    weeklyReview(ctx.db, ctx.now),
+  ]);
+
+  const stats = {
+    samples: review.estimates.samples,
+    estimatedMinutes: review.estimates.estimatedMinutes,
+    actualMinutes: review.estimates.actualMinutes,
+    byMode: review.overrunFactorByMode,
+  };
+
+  if (stats.samples === 0) {
+    return {
+      ok: false,
+      refused: 'No completed work with recorded minutes yet — there is nothing to read estimates from.',
+    };
+  }
+
+  const insight = await estimateInsight(stats);
+  return {
+    ok: true,
+    data: {
+      ...stats,
+      insight: insight ?? 'No narration available — the factors above are the reading.',
+    },
   };
 }
 

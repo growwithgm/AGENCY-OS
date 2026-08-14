@@ -18,6 +18,8 @@
 
 import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { aiConfigured } from '@/lib/env';
+import { nextIntakeQuestion, MAX_QUESTIONS } from '@/ai/jobs/clientIntake';
 import { rateLimit, hashIdentifier } from '@/lib/rateLimit';
 import {
   MAX_REQUESTS_PER_DAY, MAX_IP_REQUESTS_PER_DAY,
@@ -38,7 +40,7 @@ export type StructuredRequest = {
 };
 
 export type SubmitResult =
-  | { ok: true; requestId: string }
+  | { ok: true; requestId: string; question?: string | null }
   | { ok: false; message: string };
 
 /** A real calendar date, today or later. Anything else becomes null. */
@@ -109,11 +111,36 @@ export async function submitStructuredRequest(
 
   if (error) return { ok: false, message: 'Something went wrong. Please try again.' };
 
+  // One conversational follow-up, when the AI genuinely has something to
+  // sharpen. The budget of one is enforced in code (askedCount), the
+  // structured form above IS the fallback, and a failure here costs
+  // nothing — the request is already safely filed either way.
+  let question: string | null = null;
+  if (aiConfigured()) {
+    try {
+      const next = await nextIntakeQuestion({
+        rawInput,
+        answers: [],
+        askedCount: MAX_QUESTIONS - 1,   // exactly one question allowed
+        locale: 'en',
+      });
+      if (next.source === 'ai' && !next.done && next.question.trim()) {
+        question = next.question.trim().slice(0, 300);
+        await db.from('client_requests').update({
+          state: 'clarifying',
+          transcript: [{ role: 'assistant', content: question }],
+        }).eq('id', data.id);
+      }
+    } catch {
+      // The fixed form already collected everything essential.
+    }
+  }
+
   // Best effort: the operator is told, but a failed notification must
   // never lose the request.
   await notifyOperator(data.id).catch(() => {});
 
-  return { ok: true, requestId: data.id };
+  return { ok: true, requestId: data.id, question };
 }
 
 /**

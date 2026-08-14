@@ -218,8 +218,11 @@ request cannot be filed against someone else. It rolls back, so it changes
 nothing.
 
 **Working without AI.** Remove `MOONSHOT_API_KEY` and restart. Capture,
-client intake, the daily brief, the assistant and client updates all still
-work — they fall back to deterministic paths and say so on screen.
+client intake, the daily brief and client updates all still work — they
+fall back to deterministic paths and say so on screen. The assistant is
+the one deliberately AI-only surface: without the key a turn reports
+plainly that it could not run, and everything it would have told you is
+still on the screens themselves.
 
 **The zones you actually keep.** Open Today after a week. If the shape of
 the day on screen is not the shape of your real day, change the zones

@@ -106,6 +106,7 @@ function Review({ state, clients }: { state: CaptureState; clients: Client[] }) 
           draftId={draftId}
           clients={clients}
           reference={state.references?.[index]}
+          clarify={state.clarifyQuestions?.[index] ?? null}
           onPatch={(changes) => patch(index, changes)}
         />
       ))}
@@ -135,13 +136,15 @@ function Review({ state, clients }: { state: CaptureState; clients: Client[] }) 
   );
 }
 
-function ItemCard({ item, index, total, draftId, clients, reference, onPatch }: {
+function ItemCard({ item, index, total, draftId, clients, reference, clarify, onPatch }: {
   item: DraftItem;
   index: number;
   total: number;
   draftId: string;
   clients: Client[];
   reference?: Distribution;
+  /** The AI's one question about this item, when the parse was unsure. */
+  clarify?: string | null;
   onPatch: (changes: Partial<DraftItem>) => void;
 }) {
   const uncertain = item.confidence !== null && item.confidence < LOW_CONFIDENCE;
@@ -173,7 +176,7 @@ function ItemCard({ item, index, total, draftId, clients, reference, onPatch }: 
 
       {uncertain && (
         <p className="tiny" style={{ color: 'var(--amber-deep)', marginBottom: 10 }}>
-          Read with low confidence — check the fields below before adding.
+          {clarify ?? 'Read with low confidence — check the fields below before adding.'}
         </p>
       )}
 

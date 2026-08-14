@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { submitRequestAction, type RequestState } from './actions';
+import { answerNewRequestAction, submitRequestAction, type RequestState } from './actions';
 import { COPY } from '@/portal/copy';
 import { SERVICE_AREAS } from '@/portal/requestPolicy';
 
@@ -20,6 +20,15 @@ export function RequestFlow() {
     submitRequestAction,
     {},
   );
+
+  if (state.done && state.question && state.requestId) {
+    return (
+      <FollowUpQuestion
+        question={state.question}
+        requestId={state.requestId}
+      />
+    );
+  }
 
   if (state.done) {
     return (
@@ -101,5 +110,54 @@ export function RequestFlow() {
 
       <p className="cp-helper" style={{ marginTop: 12 }}>{copy.notCommitment}</p>
     </form>
+  );
+}
+
+/**
+ * The one conversational follow-up, asked right where the request was
+ * filed. The request is already safely with the agency — this only adds
+ * detail, and skipping it costs nothing.
+ */
+function FollowUpQuestion({ question, requestId }: { question: string; requestId: string }) {
+  const copy = COPY.request;
+  const [state, action, pending] = useActionState<RequestState, FormData>(
+    answerNewRequestAction,
+    {},
+  );
+
+  if (state.done) {
+    return (
+      <section>
+        <h2 style={{ marginBottom: 12 }}>{copy.received}</h2>
+        <p>{copy.receivedBody}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h2 style={{ marginBottom: 6 }}>{copy.received}</h2>
+      <p style={{ marginBottom: 16 }}>{copy.receivedBody}</p>
+
+      <form action={action}>
+        <input type="hidden" name="request_id" value={requestId} />
+        <div className="cp-field">
+          <label htmlFor="req-answer">
+            <strong>{copy.weHaveAQuestion}:</strong> {question}
+          </label>
+          <textarea
+            id="req-answer"
+            name="answer"
+            required
+            rows={3}
+            className="input"
+          />
+          <div className="cp-helper">{copy.questionHelper}</div>
+        </div>
+        <button type="submit" className="cp-submit" disabled={pending}>
+          {pending ? copy.sending : copy.send}
+        </button>
+      </form>
+    </section>
   );
 }

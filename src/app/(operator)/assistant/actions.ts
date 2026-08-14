@@ -3,7 +3,7 @@
 /**
  * The server side of the assistant surface.
  *
- * Four entry points, and the boundary between them is the point:
+ * Three entry points, and the boundary between them is the point:
  *
  *   sendMessageAction    runs the agent loop. Only DIRECT tools can execute.
  *   applyProposalAction  performs a fenced change — but from a fixed switch
@@ -12,8 +12,6 @@
  *                        this file.
  *   undoTurnAction       puts back what a turn changed, through the same
  *                        data layer every other write goes through.
- *   readOnlyToolAction   the three questions the button panel asks when the
- *                        assistant is offline. Reads only.
  *
  * Every one of them re-checks the operator session first. Middleware runs
  * before them, but a server action is reachable by direct POST (INV-9).
@@ -346,14 +344,4 @@ export async function undoTurnAction(payloads: UndoPayload[]): Promise<ApplyResu
   };
 }
 
-/* ── The offline button panel ─────────────────────────────────────────── */
-
-export type ReadOnlyRequest =
-  | { tool: 'get_briefing' }
-  | { tool: 'can_i_do_this_now'; workId: string }
-  | { tool: 'when_can_i_do'; mode: WorkMode; minutes: number };
-
-export type ReadOnlyResult = { steps: Step[]; diffs: Diff[]; clientColors: ClientColors };
-
-const MODES: WorkMode[] = ['creative', 'technical', 'analytical', 'operational'];
 

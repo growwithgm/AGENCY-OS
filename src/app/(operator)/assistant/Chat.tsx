@@ -27,7 +27,7 @@ import { hm, shortDate, clockTime, relativePhrase } from '@/lib/format';
 import { MODE_LABELS, PRIORITY_LABELS, type WorkMode } from '@/data/types';
 import {
   applyProposalAction, sendMessageAction, undoTurnAction,
-  type ReadOnlyRequest, type ReadOnlyResult, type TurnResult, type UndoPayload,
+  type TurnResult, type UndoPayload,
 } from './actions';
 
 

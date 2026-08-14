@@ -42,6 +42,8 @@ export const DIRECT_TOOLS = [
   'can_i_do_this_now', 'when_can_i_do', 'propose_placement',
   'propose_reshuffle', 'what_if',
   'get_briefing', 'get_weekly_review', 'list_activity',
+  // AI narration over computed facts — read-only, figures returned alongside.
+  'get_workload_advice', 'get_estimate_insight',
 
   // Full sight of the dashboard. Everything a screen shows, a tool returns:
   // an assistant that cannot see the requests badge answers "nothing new"

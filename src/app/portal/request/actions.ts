@@ -10,7 +10,13 @@ import {
   URGENCY_CHOICES,
 } from '@/portal/requestFlow';
 
-export type RequestState = { done?: boolean; error?: string };
+export type RequestState = {
+  done?: boolean;
+  error?: string;
+  /** One AI follow-up question, when there is one worth asking. */
+  question?: string;
+  requestId?: string;
+};
 
 async function callerIp(): Promise<string | null> {
   const h = await headers();
@@ -46,6 +52,30 @@ export async function submitRequestAction(
   );
 
   if (!result.ok) return { error: result.message };
+
+  revalidatePath('/portal');
+  return {
+    done: true,
+    question: result.question ?? undefined,
+    requestId: result.question ? result.requestId : undefined,
+  };
+}
+
+/**
+ * Answer the one follow-up question right where it was asked. The same
+ * guarded path as answering later from the portal page.
+ */
+export async function answerNewRequestAction(
+  _prev: RequestState,
+  form: FormData,
+): Promise<RequestState> {
+  const { session } = await requireClient();
+
+  await answerFollowUp(
+    session.clientId,
+    String(form.get('request_id') ?? ''),
+    String(form.get('answer') ?? ''),
+  );
 
   revalidatePath('/portal');
   return { done: true };

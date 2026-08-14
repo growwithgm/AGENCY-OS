@@ -5,10 +5,11 @@ import { redirect } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { listClients } from '@/data/clients';
 import {
-  confirmDraft, discardDraft, getDraft, saveDraft, updateDraftItems,
+  confirmDraft, discardDraft, getDraft, nextMissingField, saveDraft, updateDraftItems,
   type DraftItem,
 } from '@/data/capture';
 import { parseCapture } from '@/ai/jobs/parseCapture';
+import { clarifyCaptureQuestion } from '@/ai/jobs/clarifyCapture';
 import { referenceClassFor } from '@/data/work';
 import type { Distribution } from '@/engines/estimates/referenceClass';
 
@@ -21,6 +22,8 @@ export type CaptureState = {
   error?: string;
   /** What work like each item has actually taken, one per item. */
   references?: Distribution[];
+  /** One colleague-shaped question per uncertain item, else null. */
+  clarifyQuestions?: (string | null)[];
 };
 
 /**
@@ -52,11 +55,19 @@ export async function parseCaptureAction(
   revalidatePath('/requests');
 
   // The evidence is fetched before the estimate is asked for, because the
-  // first number a person reaches for is the one they anchor on.
-  const references = await Promise.all(
-    parsed.items.map((item) =>
-      referenceClassFor(supabase, item.title, item.mode ?? 'operational')),
-  );
+  // first number a person reaches for is the one they anchor on. And where
+  // the parse was genuinely unsure, one colleague-shaped question replaces
+  // the bare field label — never about priority (INV-1).
+  const [references, clarifyQuestions] = await Promise.all([
+    Promise.all(parsed.items.map((item) =>
+      referenceClassFor(supabase, item.title, item.mode ?? 'operational'))),
+    Promise.all(parsed.items.map((item) => {
+      const uncertain = item.confidence !== null && item.confidence < 0.7;
+      const field = nextMissingField(item);
+      if (!uncertain || !field || field === 'priority') return null;
+      return clarifyCaptureQuestion({ rawInput, itemTitle: item.title, field });
+    })),
+  ]);
 
   return {
     stage: 'review',
@@ -65,6 +76,7 @@ export async function parseCaptureAction(
     parsedBy: parsed.source,
     rawInput,
     references,
+    clarifyQuestions,
   };
 }
 
