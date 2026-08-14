@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DayZone, WorkMode } from '@/engines/planner/types';
 import { generateZonedSlots, modeCapacity } from '@/engines/planner/zones';
+import { planReferenceData } from '@/data/planning';
 
 export type ZoneRow = DayZone & { id: string };
 
@@ -52,17 +53,19 @@ export async function dayShape(
   // A zone can run past midnight, so look a little into tomorrow.
   const windowEnd = new Date(dayStart.getTime() + 30 * 3600_000);
 
-  const [zones, blocksRes, blackoutsRes] = await Promise.all([
-    listZones(db),
+  // Zones and blackouts come from the per-request shared fetch — the same
+  // rows Today's other panels already loaded.
+  const [reference, blocksRes] = await Promise.all([
+    planReferenceData(db),
     db.from('schedule_blocks')
       .select('task_id, starts_at, ends_at, zone, tasks(mode, client_id, clients(color_index))')
       .gte('starts_at', dayStart.toISOString())
       .lt('starts_at', windowEnd.toISOString())
       .order('starts_at'),
-    db.from('blackouts').select('starts_at, ends_at'),
   ]);
+  const zones = reference.zones;
 
-  const slots = generateZonedSlots(dayStart, 1, zones, blackoutsRes.data ?? [], []);
+  const slots = generateZonedSlots(dayStart, 1, zones, reference.blackouts, []);
   const key = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
 
   type BlockRow = {

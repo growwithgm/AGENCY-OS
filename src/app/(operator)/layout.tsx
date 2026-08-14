@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
 import { requireOperator } from '@/lib/auth';
-import { openDrafts } from '@/data/capture';
-import { pendingRequests } from '@/data/requests';
 import { transcriptionConfigured } from '@/data/aiHealth';
 import { Nav } from './Nav';
 import { CommandK } from './CommandK';
@@ -15,25 +13,30 @@ export const dynamic = 'force-dynamic';
 export default async function OperatorLayout({ children }: { children: ReactNode }) {
   const { session, supabase } = await requireOperator();
 
-  // Two different queues, two different numbers. The Requests badge is only
-  // client requests waiting on a decision; parked captures are the
-  // operator's own unfinished inbox and belong on the capture button, not
-  // conflated onto Requests (the report caught them inflating that count).
-  const [drafts, requests] = await Promise.all([
-    openDrafts(supabase),
-    pendingRequests(supabase),
+  // Two different queues, two different numbers — and only the numbers.
+  // These run on every navigation, so they are head-only counts rather
+  // than full row fetches.
+  const [draftsRes, requestsRes] = await Promise.all([
+    supabase.from('capture_drafts')
+      .select('id', { count: 'exact', head: true })
+      .eq('state', 'open'),
+    supabase.from('client_requests')
+      .select('id', { count: 'exact', head: true })
+      .in('state', ['pending_approval', 'clarifying']),
   ]);
+  const draftCount = draftsRes.count ?? 0;
+  const requestCount = requestsRes.count ?? 0;
 
   const dateShort = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
   return (
     <div className="app">
-      <Nav requestCount={requests.length} operatorEmail={session.email} dateShort={dateShort} />
+      <Nav requestCount={requestCount} operatorEmail={session.email} dateShort={dateShort} />
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {children}
-        <a className="fab" href="/capture" aria-label={`Capture work${drafts.length ? ` — ${drafts.length} in your inbox` : ''}`}>
+        <a className="fab" href="/capture" aria-label={`Capture work${draftCount ? ` — ${draftCount} in your inbox` : ''}`}>
           +
-          {drafts.length > 0 && <span className="fab__count" aria-hidden>{drafts.length}</span>}
+          {draftCount > 0 && <span className="fab__count" aria-hidden>{draftCount}</span>}
         </a>
         <CommandK transcription={transcriptionConfigured()} />
       </div>

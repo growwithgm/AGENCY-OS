@@ -65,6 +65,44 @@ export function fallbackBrief(facts: BriefFacts): string {
   return lines.join('\n');
 }
 
+/**
+ * The brief, cached for the day.
+ *
+ * The figures on screen are always live — only the prose is cached, and
+ * prose about a day is true for that day. Without the cache every visit
+ * to the assistant page paid a full model call before it could render.
+ */
+export async function dailyBriefCached(
+  db: import('@supabase/supabase-js').SupabaseClient,
+  facts: BriefFacts,
+): Promise<BriefResult> {
+  const key = `daily_brief:${facts.date}`;
+
+  const { data: hit } = await db.from('daily_cache')
+    .select('value, updated_at')
+    .eq('key', key)
+    .maybeSingle();
+
+  if (hit && typeof hit.value === 'object' && hit.value !== null) {
+    const cached = hit.value as { text?: string; source?: string };
+    if (cached.text) {
+      return { text: cached.text, source: (cached.source as BriefResult['source']) ?? 'ai' };
+    }
+  }
+
+  const fresh = await dailyBrief(facts);
+
+  // A fallback brief is not worth pinning for the day — the next visit
+  // should try the model again.
+  if (fresh.source === 'ai') {
+    await db.from('daily_cache')
+      .upsert({ key, value: fresh, updated_at: new Date().toISOString() })
+      .then(() => {}, () => {});
+  }
+
+  return fresh;
+}
+
 export async function dailyBrief(facts: BriefFacts): Promise<BriefResult> {
   if (!aiConfigured()) return { text: fallbackBrief(facts), source: 'fallback' };
 

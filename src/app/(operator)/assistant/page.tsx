@@ -13,11 +13,10 @@ import { todayView } from '@/data/planning';
 import { pendingRequests } from '@/data/requests';
 import { pendingUpdates } from '@/data/updates';
 import { effortSamples } from '@/data/work';
-import { aiHealthy, transcriptionConfigured } from '@/data/aiHealth';
+import { transcriptionConfigured } from '@/data/aiHealth';
 import { allSuggestions } from '@/engines/estimates/learn';
-import { dailyBrief } from '@/ai/jobs/brief';
+import { dailyBriefCached } from '@/ai/jobs/brief';
 import { hm } from '@/lib/format';
-import { AiHealthBanner } from '@/components/AiHealthBanner';
 import { Chat } from './Chat';
 
 export const dynamic = 'force-dynamic';
@@ -26,18 +25,17 @@ export default async function AssistantPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, requests, updates, samples, healthy] = await Promise.all([
+  const [view, signals, requests, updates, samples] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     pendingRequests(supabase),
     pendingUpdates(supabase),
     effortSamples(supabase),
-    aiHealthy(supabase),
   ]);
 
   const draftCount = updates.filter((u) => u.status === 'draft').length;
 
-  const brief = await dailyBrief({
+  const brief = await dailyBriefCached(supabase, {
     date: view.date,
     availableMinutes: view.availableMinutes,
     plannedMinutes: view.plannedMinutes,
@@ -67,8 +65,6 @@ export default async function AssistantPage() {
         </div>
       </div>
 
-      <AiHealthBanner healthy={healthy} />
-
       {/* The conversation gets the width; the day's figures sit beside it. */}
       <div className="cols">
       <div className="cols__main">
@@ -81,7 +77,7 @@ export default async function AssistantPage() {
         same thing in a smaller window.
       </p>
 
-      <Chat transcription={transcriptionConfigured()} offline={!healthy} running={running} />
+      <Chat transcription={transcriptionConfigured()} />
 
       </div>
 

@@ -6,6 +6,7 @@
  * commitment (INV-5).
  */
 
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { plan, dayCapacities, ENGINE_VERSION } from '@/engines/planner/plan';
 import { generateZonedSlots } from '@/engines/planner/zones';
@@ -17,16 +18,42 @@ import { dateKey } from '@/lib/format';
 export const HORIZON_DAYS = 14;
 export const MIN_BLOCK_MINUTES = 30;
 
+/**
+ * The day's shape — working hours, blackouts, zones — fetched once per
+ * request and shared by everything that renders from it. React's cache()
+ * keys on the client instance, and supabaseServer() is itself cached per
+ * request, so one render means one fetch of these three tables.
+ */
+export const planReferenceData = cache(async (db: SupabaseClient) => {
+  const [rules, blackouts, zones] = await Promise.all([
+    db.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
+    db.from('blackouts').select('starts_at, ends_at'),
+    db.from('day_zones').select('weekday, name, start_time, end_time, modes'),
+  ]);
+
+  const dayZones: DayZone[] = (zones.data ?? []).map((z) => ({
+    weekday: z.weekday,
+    name: z.name,
+    start_time: String(z.start_time).slice(0, 5),
+    end_time: String(z.end_time).slice(0, 5),
+    modes: z.modes as WorkMode[],
+  }));
+
+  return {
+    capacityRules: rules.data ?? [],
+    blackouts: blackouts.data ?? [],
+    zones: dayZones,
+  };
+});
+
 export async function loadPlanInputs(db: SupabaseClient, now: Date) {
-  const [tasks, deps, rules, blackouts, fixed, zones, visibility] = await Promise.all([
+  const [tasks, deps, reference, fixed, visibility] = await Promise.all([
     db.from('tasks')
       .select('id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count, mode, safe_minutes, client_visible')
       .neq('status', 'done'),
     db.from('task_dependencies').select('task_id, depends_on'),
-    db.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
-    db.from('blackouts').select('starts_at, ends_at'),
+    planReferenceData(db),
     db.from('schedule_blocks').select('task_id, starts_at, ends_at').eq('is_locked', true),
-    db.from('day_zones').select('weekday, name, start_time, end_time, modes'),
     db.from('client_visibility').select('client_id, target_days, last_visible_completion'),
   ]);
 
@@ -48,25 +75,16 @@ export async function loadPlanInputs(db: SupabaseClient, now: Date) {
     client_visible: t.client_visible ?? true,
   }));
 
-  // Times arrive as 'HH:MM:SS'; the engine reads 'HH:MM'.
-  const dayZones: DayZone[] = (zones.data ?? []).map((z) => ({
-    weekday: z.weekday,
-    name: z.name,
-    start_time: String(z.start_time).slice(0, 5),
-    end_time: String(z.end_time).slice(0, 5),
-    modes: z.modes as WorkMode[],
-  }));
-
   return {
     now,
     horizonDays: HORIZON_DAYS,
     minBlockMinutes: MIN_BLOCK_MINUTES,
     tasks: planTasks,
     dependencies: deps.data ?? [],
-    capacityRules: rules.data ?? [],
-    blackouts: blackouts.data ?? [],
+    capacityRules: reference.capacityRules,
+    blackouts: reference.blackouts,
     fixedBlocks: fixed.data ?? [],
-    zones: dayZones,
+    zones: reference.zones,
     visibility: (visibility.data ?? []) as VisibilityState[],
   };
 }
@@ -186,15 +204,13 @@ export async function todayView(db: SupabaseClient, now = new Date()): Promise<T
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
   const key = dateKey(dayStart);
 
-  const [blocksRes, rulesRes, blackoutsRes, zonesRes, tomorrowRes] = await Promise.all([
+  const [blocksRes, reference, tomorrowRes] = await Promise.all([
     db.from('schedule_blocks')
       .select('id, task_id, starts_at, ends_at, tasks(id, client_id, title, status, priority, est_minutes, actual_minutes, committed_date, internal_target, client_requested_date, created_at, slid_count, mode, safe_minutes, client_visible, clients(name, color_index))')
       .gte('starts_at', dayStart.toISOString())
       .lt('starts_at', dayEnd.toISOString())
       .order('starts_at'),
-    db.from('capacity_rules').select('weekday, start_time, end_time, max_minutes'),
-    db.from('blackouts').select('starts_at, ends_at'),
-    db.from('day_zones').select('weekday, name, start_time, end_time, modes'),
+    planReferenceData(db),
     db.from('schedule_blocks')
       .select('starts_at, ends_at')
       .gte('starts_at', dayEnd.toISOString())
@@ -222,23 +238,17 @@ export async function todayView(db: SupabaseClient, now = new Date()): Promise<T
 
   // Available time, ignoring the plan itself. With zones configured, the
   // zones are the day's shape; without them, the old working-hours rules.
-  const zones: DayZone[] = (zonesRes.data ?? []).map((z) => ({
-    weekday: z.weekday,
-    name: z.name,
-    start_time: String(z.start_time).slice(0, 5),
-    end_time: String(z.end_time).slice(0, 5),
-    modes: z.modes as WorkMode[],
-  }));
+  const zones = reference.zones;
 
   const availableFor = (start: Date, dateKeyValue: string): number => {
     if (zones.length > 0) {
       return Math.round(
-        generateZonedSlots(start, 1, zones, blackoutsRes.data ?? [], [], rulesRes.data ?? [])
+        generateZonedSlots(start, 1, zones, reference.blackouts, [], reference.capacityRules)
           .filter((s) => s.day === dateKeyValue)
           .reduce((sum, s) => sum + (s.end.getTime() - s.start.getTime()) / 60_000, 0),
       );
     }
-    return dayCapacities(start, 1, rulesRes.data ?? [], blackoutsRes.data ?? [], [])
+    return dayCapacities(start, 1, reference.capacityRules, reference.blackouts, [])
       .find((c) => c.date === dateKeyValue)?.availableMinutes ?? 0;
   };
 

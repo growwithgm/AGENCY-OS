@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -21,7 +22,7 @@ function readMetadata(user: User): AppMetadata {
   return (user.app_metadata ?? {}) as AppMetadata;
 }
 
-export async function currentSession(): Promise<Session | null> {
+export const currentSession = cache(async (): Promise<Session | null> => {
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -42,7 +43,7 @@ export async function currentSession(): Promise<Session | null> {
   }
 
   return null;
-}
+});
 
 /**
  * Operator gate for pages and server actions (INV-9).

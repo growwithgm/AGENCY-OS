@@ -11,7 +11,8 @@
  *   2. A fenced action is never performed by the model. Proposals arrive as
  *      panels; Apply calls an ordinary server action that re-reads the item
  *      and does the work itself.
- *   3. When the assistant is offline the surface becomes buttons that ask
+ *   3. A failed turn reports itself in a line and the conversation
+ *      carries on — there is no offline mode.
  *      the same deterministic questions, with no prose at all.
  */
 
@@ -24,11 +25,10 @@ import { ClientName } from '@/components/marks';
 import { hm, shortDate, clockTime, relativePhrase } from '@/lib/format';
 import { MODE_LABELS, PRIORITY_LABELS, type WorkMode } from '@/data/types';
 import {
-  applyProposalAction, readOnlyToolAction, sendMessageAction, undoTurnAction,
+  applyProposalAction, sendMessageAction, undoTurnAction,
   type ReadOnlyRequest, type ReadOnlyResult, type TurnResult, type UndoPayload,
 } from './actions';
 
-export type RunningItem = { id: string; title: string };
 
 type Entry =
   | { id: number; kind: 'operator'; text: string }
@@ -575,100 +575,6 @@ function TurnView({ turn, onApplied }: { turn: TurnResult; onApplied: (message: 
   );
 }
 
-/* ── the offline button panel ─────────────────────────────────────────── */
-
-const MODES: WorkMode[] = ['creative', 'technical', 'analytical', 'operational'];
-const LENGTHS = [30, 60, 120, 240];
-
-function OfflinePanel({ running }: { running: RunningItem | null }) {
-  const [result, setResult] = useState<ReadOnlyResult | null>(null);
-  const [pending, setPending] = useState(false);
-  const [mode, setMode] = useState<WorkMode>('creative');
-  const [minutes, setMinutes] = useState(60);
-
-  const ask = async (request: ReadOnlyRequest) => {
-    setPending(true);
-    try {
-      setResult(await readOnlyToolAction(request));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <div className="stack">
-      <p className="small dim">
-        The assistant is offline, so this asks the questions directly. Everything it does is
-        also in the normal screens.
-      </p>
-
-      <div className="row" style={{ gap: 8 }}>
-        <button type="button" className="btn btn--sm" disabled={pending} onClick={() => void ask({ tool: 'get_briefing' })}>
-          Show today
-        </button>
-        {running && (
-          <button
-            type="button"
-            className="btn btn--sm"
-            disabled={pending}
-            onClick={() => void ask({ tool: 'can_i_do_this_now', workId: running.id })}
-          >
-            Can I run “{running.title}” now?
-          </button>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="label">Find the next window</div>
-        <div className="chips" style={{ marginTop: 8 }}>
-          {MODES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`choice${mode === option ? ' choice--on' : ''}`}
-              onClick={() => setMode(option)}
-            >
-              {MODE_LABELS[option]}
-            </button>
-          ))}
-        </div>
-        <div className="chips" style={{ marginTop: 8 }}>
-          {LENGTHS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`choice${minutes === option ? ' choice--on' : ''}`}
-              onClick={() => setMinutes(option)}
-            >
-              {hm(option)}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="btn btn--sm"
-          style={{ marginTop: 10 }}
-          disabled={pending}
-          onClick={() => void ask({ tool: 'when_can_i_do', mode, minutes })}
-        >
-          {pending ? 'Working it out…' : 'Find the windows'}
-        </button>
-      </div>
-
-      {result && (
-        <>
-          <Facts steps={result.steps} />
-          {result.diffs.map((diff, index) => (
-            <DiffPanel key={`offline-diff-${index}`} diff={diff} clientColors={result.clientColors} />
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── the microphone ───────────────────────────────────────────────────── */
-
 function MicButton({ onText }: { onText: (text: string) => void }) {
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState(false);
@@ -743,14 +649,10 @@ function MicButton({ onText }: { onText: (text: string) => void }) {
 
 export function Chat({
   transcription = false,
-  offline = false,
-  running = null,
   compact = false,
   autoFocus = false,
 }: {
   transcription?: boolean;
-  offline?: boolean;
-  running?: RunningItem | null;
   compact?: boolean;
   autoFocus?: boolean;
 }) {
@@ -758,7 +660,6 @@ export function Chat({
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [pending, setPending] = useState(false);
-  const [degraded, setDegraded] = useState(offline);
   const [undoOffer, setUndoOffer] = useState<{ payloads: UndoPayload[]; count: number } | null>(null);
   const [undoPending, setUndoPending] = useState(false);
 
@@ -794,7 +695,6 @@ export function Chat({
       const turn = await sendMessageAction({ history, message: trimmed });
       setHistory(turn.transcript);
       setEntries((prev) => [...prev, { id: nextId.current++, kind: 'assistant', turn }]);
-      if (turn.degraded) setDegraded(true);
       if (turn.undo.length > 0) {
         setUndoOffer({ payloads: turn.undo, count: turn.undo.length });
         router.refresh();
@@ -833,17 +733,6 @@ export function Chat({
     }
     return <TurnView key={entry.id} turn={entry.turn} onApplied={addNote} />;
   });
-
-  // Anything already said stays on screen when the assistant goes offline
-  // mid-conversation: the last answer is usually the explanation of why.
-  if (degraded) {
-    return (
-      <div className="stack">
-        {conversation.length > 0 && <div className="stack">{conversation}</div>}
-        <OfflinePanel running={running} />
-      </div>
-    );
-  }
 
   return (
     <div className="stack">

@@ -622,6 +622,14 @@ create table if not exists rate_limit_events (
 create index if not exists rate_limit_events_lookup_idx
   on rate_limit_events (bucket, identity, created_at desc);
 
+-- Values expensive to make and true for a day (the assistant's brief).
+-- Everything here can be recomputed from the tables around it.
+create table if not exists daily_cache (
+  key        text primary key,
+  value      jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 -- Atomic fixed-window limiter. Count and insert happen together under a
 -- per-key advisory lock, so concurrent callers for the same key cannot all
 -- read the count before any of them writes — the race that would otherwise
@@ -682,7 +690,7 @@ begin
     'effort_records','estimate_history','audit_events','attention_signals',
     'client_updates','capture_drafts','client_requests','push_subscriptions',
     'notification_settings','notification_log','ai_runs','rate_limit_events',
-    'app_users','day_zones','overrun_reasons','client_visibility',
+    'app_users','day_zones','overrun_reasons','client_visibility','daily_cache',
     'activity_log','notification_queue',
     -- retained from the previous build; nothing writes to these today
     'ai_cache','jobs'

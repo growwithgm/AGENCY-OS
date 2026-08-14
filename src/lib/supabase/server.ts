@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -10,7 +11,7 @@ import { env } from '@/lib/env';
  * operator exactly as it applies to a client (INV-8, INV-9). The
  * service-role key is reserved for machine callers — see admin.ts.
  */
-export async function supabaseServer(): Promise<SupabaseClient> {
+export const supabaseServer = cache(async (): Promise<SupabaseClient> => {
   const cookieStore = await cookies();
 
   return createServerClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
@@ -30,4 +31,4 @@ export async function supabaseServer(): Promise<SupabaseClient> {
       },
     },
   });
-}
+});
