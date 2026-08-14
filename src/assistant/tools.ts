@@ -16,9 +16,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { plan } from '@/engines/planner/plan';
 import { generateZonedSlots } from '@/engines/planner/zones';
 import { MODE_MIN_MINUTES, type WorkMode } from '@/engines/planner/types';
-import { loadPlanInputs, todayView } from '@/data/planning';
+import { loadPlanInputs, todayView, replan } from '@/data/planning';
 import { listZones } from '@/data/zones';
-import { getWork, listWork, updateWork, completeWork, pushWork } from '@/data/work';
+import {
+  getWork, listWork, updateWork, completeWork, pushWork,
+  createWork, splitWork, pinWork, stopWork, referenceClassFor,
+} from '@/data/work';
+import { addBlackout, removeBlackout } from '@/data/blackouts';
+import { createRecurrenceRule, setRecurrenceActive, type RecurrenceRule } from '@/data/recurrence';
+import { generateUpdateDraft, listUpdates } from '@/data/updates';
 import { listClients, clientSummaries } from '@/data/clients';
 import { listActivity } from '@/data/activity';
 import { pendingRequests, getRequest } from '@/data/requests';
@@ -230,6 +236,186 @@ export const TOOL_SCHEMAS: Record<string, Schema> = {
       type: 'object',
       properties: { path: { type: 'string', description: 'e.g. /work, /clients, /review' } },
       required: ['path'],
+    },
+  },
+  filter: {
+    description: 'Send the operator to the Work screen filtered by status, mode or client.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['backlog', 'scheduled', 'in_progress', 'blocked', 'waiting_on_client', 'done'],
+        },
+        mode: { type: 'string', enum: ['creative', 'technical', 'analytical', 'operational'] },
+        client: { type: 'string', description: 'Client name, matched loosely' },
+        group_by_client: { type: 'boolean' },
+      },
+    },
+  },
+  create_task: {
+    description: 'Create a new internal work item. Priority must come from the operator’s own words — NEVER pick one yourself; if they did not state it, ask. The item starts internal (not visible to any client); making it visible is the operator’s tap.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        priority: {
+          type: 'string',
+          enum: ['critical', 'high', 'normal', 'low'],
+          description: 'ONLY as the operator stated it. If they did not say, do not call this tool — ask them.',
+        },
+        est_minutes: { type: 'integer' },
+        client: { type: 'string', description: 'Client name; omit for the operator’s own internal work' },
+        mode: { type: 'string', enum: ['creative', 'technical', 'analytical', 'operational'] },
+        internal_target: { type: 'string', description: 'YYYY-MM-DD, only if stated' },
+        description: { type: 'string' },
+      },
+      required: ['title', 'priority', 'est_minutes'],
+    },
+  },
+  split_task: {
+    description: 'Split one work item into two consecutive pieces. Give the minutes for the first piece; the rest becomes "(part 2)". Both pieces must clear the mode’s minimum block.',
+    parameters: {
+      type: 'object',
+      properties: {
+        work_id: { type: 'string' },
+        first_minutes: { type: 'integer' },
+      },
+      required: ['work_id', 'first_minutes'],
+    },
+  },
+  pin_task: {
+    description: 'Pin a work item’s scheduled blocks so replanning cannot move them.',
+    parameters: {
+      type: 'object',
+      properties: { work_id: { type: 'string' } },
+      required: ['work_id'],
+    },
+  },
+  unpin_task: {
+    description: 'Release a pinned work item so the planner may move it again.',
+    parameters: {
+      type: 'object',
+      properties: { work_id: { type: 'string' } },
+      required: ['work_id'],
+    },
+  },
+  stop_timer: {
+    description: 'Stop working on an in-progress item without finishing it. Pass minutes only if the operator stated them; omit rather than guess.',
+    parameters: {
+      type: 'object',
+      properties: { work_id: { type: 'string' }, minutes: { type: 'integer' } },
+      required: ['work_id'],
+    },
+  },
+  reschedule: {
+    description: 'Re-run the planner over the whole horizon now and report what it placed and what is at risk.',
+    parameters: { type: 'object', properties: {} },
+  },
+  add_blackout: {
+    description: 'Block out time that exists in the working hours but is not available — travel, an appointment. Capacity shrinks and the plan adjusts at once.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        start_time: { type: 'string', description: 'HH:MM' },
+        end_time: { type: 'string', description: 'HH:MM — at or before start runs into the next day' },
+        reason: { type: 'string' },
+      },
+      required: ['date', 'start_time', 'end_time'],
+    },
+  },
+  remove_blackout: {
+    description: 'Remove a blackout, giving back the time. Name the date; if several exist that day, they are listed to choose from by id.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        blackout_id: { type: 'string', description: 'Exact id, when the date alone is ambiguous' },
+      },
+    },
+  },
+  adjust_capacity_exception: {
+    description: 'Reduce one day’s capacity by a stated amount ("I only have half a day on Friday") — recorded as a blackout at the end of that day’s working window. Extending a day is a Settings change, not this.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        unavailable_minutes: { type: 'integer', description: 'How much of the day is lost' },
+        reason: { type: 'string' },
+      },
+      required: ['date', 'unavailable_minutes'],
+    },
+  },
+  create_recurrence: {
+    description: 'Create a recurring-work rule. Priority must come from the operator’s own words — never pick one. Occurrences start internal (not client-visible); Settings is where that changes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        client: { type: 'string', description: 'Client name' },
+        priority: {
+          type: 'string',
+          enum: ['critical', 'high', 'normal', 'low'],
+          description: 'ONLY as the operator stated it; ask if they did not.',
+        },
+        est_minutes: { type: 'integer' },
+        frequency: { type: 'string', enum: ['every_n_days', 'weekly', 'monthly'] },
+        weekday: { type: 'integer', description: '0=Sunday … 6=Saturday, for weekly' },
+        month_day: { type: 'integer', description: '1–28, for monthly' },
+        interval_n: { type: 'integer', description: 'Every N days, for every_n_days' },
+      },
+      required: ['title', 'client', 'priority', 'est_minutes', 'frequency'],
+    },
+  },
+  pause_recurrence: {
+    description: 'Pause a recurring-work rule so it stops creating occurrences. Resuming is a Settings tap.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rule: { type: 'string', description: 'The rule’s title (matched loosely) or exact id' },
+      },
+      required: ['rule'],
+    },
+  },
+  generate_report_draft: {
+    description: 'Draft a client update from the last week’s recorded work. It lands as a draft with evidence attached — publishing stays with the operator.',
+    parameters: {
+      type: 'object',
+      properties: { client: { type: 'string', description: 'Client name' } },
+      required: ['client'],
+    },
+  },
+  regenerate_report_draft: {
+    description: 'Throw away the newest unpublished draft for a client and draft a fresh one from the current record.',
+    parameters: {
+      type: 'object',
+      properties: { client: { type: 'string', description: 'Client name' } },
+      required: ['client'],
+    },
+  },
+  create_touchpoint: {
+    description: 'Create a small internal touchpoint task for a client — a reminder to reach out. 15 minutes, operational, low priority unless the operator stated otherwise, never client-visible.',
+    parameters: {
+      type: 'object',
+      properties: {
+        client: { type: 'string', description: 'Client name' },
+        note: { type: 'string', description: 'What to raise with them, if stated' },
+        priority: {
+          type: 'string',
+          enum: ['critical', 'high', 'normal', 'low'],
+          description: 'Only if the operator stated one; omit otherwise.',
+        },
+      },
+      required: ['client'],
+    },
+  },
+  apply_estimate_suggestion: {
+    description: 'Replace a work item’s estimate with the reference-class median for similar completed work. Refused when there is not enough history to stand on.',
+    parameters: {
+      type: 'object',
+      properties: { work_id: { type: 'string' } },
+      required: ['work_id'],
     },
   },
 };
@@ -531,7 +717,23 @@ export async function runTool(
       case 'block_task': return await blockTask(ctx, String(args.work_id ?? ''), String(args.reason ?? ''));
       case 'unblock_task': return await setStatus(ctx, String(args.work_id ?? ''), 'backlog');
       case 'start_timer': return await startTimer(ctx, String(args.work_id ?? ''));
+      case 'stop_timer': return await stopTimer(ctx, args);
       case 'navigate': return { ok: true, data: { navigate: String(args.path ?? '/') } };
+      case 'filter': return await filterTool(ctx, args);
+      case 'create_task': return await createTask(ctx, args);
+      case 'split_task': return await splitTask(ctx, args);
+      case 'pin_task': return await pinTask(ctx, String(args.work_id ?? ''), true);
+      case 'unpin_task': return await pinTask(ctx, String(args.work_id ?? ''), false);
+      case 'reschedule': return await reschedule(ctx);
+      case 'add_blackout': return await addBlackoutTool(ctx, args);
+      case 'remove_blackout': return await removeBlackoutTool(ctx, args);
+      case 'adjust_capacity_exception': return await capacityException(ctx, args);
+      case 'create_recurrence': return await createRecurrence(ctx, args);
+      case 'pause_recurrence': return await pauseRecurrence(ctx, String(args.rule ?? ''));
+      case 'generate_report_draft': return await reportDraft(ctx, String(args.client ?? ''), false);
+      case 'regenerate_report_draft': return await reportDraft(ctx, String(args.client ?? ''), true);
+      case 'create_touchpoint': return await createTouchpoint(ctx, args);
+      case 'apply_estimate_suggestion': return await applyEstimateSuggestion(ctx, String(args.work_id ?? ''));
       default:
         return { ok: false, refused: `${name} is not implemented yet.` };
     }
@@ -987,6 +1189,501 @@ async function startTimer(ctx: ToolContext, workId: string): Promise<ToolResult>
     ok: true,
     data: { started: before.title },
     undo: { taskId: workId, before: { status: before.status } },
+  };
+}
+
+async function stopTimer(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const workId = String(args.work_id ?? '');
+  const before = await getWork(ctx.db, workId);
+  if (!before) return { ok: false, refused: 'I cannot find that work item.' };
+  if (before.status !== 'in_progress') {
+    return { ok: false, refused: `"${before.title}" is not running, so there is nothing to stop.` };
+  }
+
+  const minutes = args.minutes === undefined ? null : Number(args.minutes);
+  await stopWork(ctx.db, workId, minutes, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      stopped: before.title,
+      minutes_recorded: minutes,
+      note: minutes === null ? 'No duration recorded — say the minutes if you want them kept.' : undefined,
+    },
+    undo: { taskId: workId, before: { status: before.status } },
+  };
+}
+
+/* The rest of the DIRECT surface --------------------------------------- */
+
+const PRIORITY_WORDS: Record<string, number> = { critical: 1, high: 2, normal: 3, low: 4 };
+
+/** Loose client-name match, shared by every tool that takes a client. */
+async function resolveClient(
+  ctx: ToolContext,
+  name: string,
+): Promise<{ id: string; name: string } | null> {
+  if (!name) return null;
+  const clients = await listClients(ctx.db);
+  const needle = name.toLowerCase();
+  const exact = clients.find((c) => c.name.toLowerCase() === needle);
+  return exact ?? clients.find((c) => c.name.toLowerCase().includes(needle)) ?? null;
+}
+
+async function filterTool(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const params = new URLSearchParams();
+  if (typeof args.status === 'string') params.set('status', args.status);
+  if (typeof args.mode === 'string') params.set('mode', args.mode);
+  if (args.group_by_client === true) params.set('group', 'client');
+  if (typeof args.client === 'string' && args.client) {
+    const client = await resolveClient(ctx, args.client);
+    if (!client) return { ok: false, refused: `No client matches “${args.client}”.` };
+    params.set('client', client.id);
+  }
+  const query = params.toString();
+  return { ok: true, data: { navigate: query ? `/work?${query}` : '/work' } };
+}
+
+async function createTask(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const title = String(args.title ?? '').trim();
+  if (!title) return { ok: false, refused: 'The work needs a title.' };
+
+  const priority = PRIORITY_WORDS[String(args.priority ?? '').toLowerCase()];
+  if (!priority) {
+    return {
+      ok: false,
+      refused: 'Priority is yours to set — tell me critical, high, normal or low and I will create it.',
+    };
+  }
+
+  const est = Number(args.est_minutes ?? 0);
+  if (!Number.isFinite(est) || est <= 0) {
+    return { ok: false, refused: 'I need an honest estimate in minutes to create it.' };
+  }
+
+  let clientId: string | null = null;
+  if (typeof args.client === 'string' && args.client) {
+    const client = await resolveClient(ctx, args.client);
+    if (!client) return { ok: false, refused: `No client matches “${args.client}”.` };
+    clientId = client.id;
+  }
+
+  const target = typeof args.internal_target === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.internal_target)
+    ? args.internal_target
+    : null;
+
+  const created = await createWork(ctx.db, {
+    clientId,
+    title,
+    priority,
+    estMinutes: Math.round(est),
+    mode: typeof args.mode === 'string' ? (args.mode as WorkMode) : 'operational',
+    internalTarget: target,
+    description: typeof args.description === 'string' ? args.description : null,
+    // Nothing the assistant creates reaches a client. Making it visible on
+    // the portal is the operator's own tap on the work screen.
+    clientVisible: false,
+    origin: 'assistant',
+  });
+
+  return {
+    ok: true,
+    data: {
+      created: created.title,
+      id: created.id,
+      est_minutes: created.est_minutes,
+      internal_target: created.internal_target,
+      note: 'Created internal — it is not visible to any client until you make it so.',
+    },
+  };
+}
+
+async function splitTask(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const workId = String(args.work_id ?? '');
+  const before = await getWork(ctx.db, workId);
+  if (!before) return { ok: false, refused: 'I cannot find that work item.' };
+
+  const guard = movable(before);
+  if (guard) return guard;
+  if (before.status === 'done') {
+    return { ok: false, refused: 'That work is finished; there is nothing left to split.' };
+  }
+
+  const first = Math.round(Number(args.first_minutes ?? 0));
+  const total = before.est_minutes ?? 0;
+  const rest = total - first;
+  const minimum = MODE_MIN_MINUTES[(before.mode ?? 'operational') as WorkMode];
+
+  if (first < minimum || rest < minimum) {
+    return {
+      ok: false,
+      refused: `${before.mode ?? 'operational'} work is never scheduled below ${hm(minimum)} unbroken, and that split would leave a piece of ${hm(Math.min(first, Math.max(rest, 0)))}.`,
+      alternative: total >= 2 * minimum
+        ? `Any first piece between ${hm(minimum)} and ${hm(total - minimum)} works.`
+        : `At ${hm(total)} total it is too small to split at all.`,
+    };
+  }
+
+  const { second } = await splitWork(ctx.db, workId, first, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      split: before.title,
+      first_minutes: first,
+      second_title: second.title,
+      second_minutes: second.est_minutes,
+      second_id: second.id,
+    },
+    undo: { taskId: workId, before: { estMinutes: total } },
+  };
+}
+
+async function pinTask(ctx: ToolContext, workId: string, pinned: boolean): Promise<ToolResult> {
+  const before = await getWork(ctx.db, workId);
+  if (!before) return { ok: false, refused: 'I cannot find that work item.' };
+
+  const blocks = await pinWork(ctx.db, workId, pinned, ctx.actor);
+  if (blocks === 0) {
+    return {
+      ok: false,
+      refused: `"${before.title}" has nothing scheduled ahead, so there is nothing to ${pinned ? 'pin' : 'release'}.`,
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      [pinned ? 'pinned' : 'unpinned']: before.title,
+      blocks,
+      note: pinned
+        ? 'Replanning will leave those blocks exactly where they are.'
+        : 'The planner may move it again.',
+    },
+  };
+}
+
+async function reschedule(ctx: ToolContext): Promise<ToolResult> {
+  const result = await replan(ctx.db, ctx.now);
+  return {
+    ok: true,
+    data: {
+      replanned: true,
+      blocks_created: result.blocks.length,
+      at_risk: result.atRisk.length,
+    },
+  };
+}
+
+async function addBlackoutTool(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const date = String(args.date ?? '');
+  const start = String(args.start_time ?? '');
+  const end = String(args.end_time ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, refused: 'I need the date as YYYY-MM-DD.' };
+  if (!/^\d{2}:\d{2}/.test(start) || !/^\d{2}:\d{2}/.test(end)) {
+    return { ok: false, refused: 'I need both times as HH:MM.' };
+  }
+
+  const added = await addBlackout(ctx.db, {
+    date, start, end,
+    reason: typeof args.reason === 'string' ? args.reason : null,
+  }, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      blacked_out: date,
+      from: start.slice(0, 5),
+      to: end.slice(0, 5),
+      minutes_off_capacity: added.minutes,
+      note: 'The plan has already adjusted to the smaller day.',
+    },
+  };
+}
+
+async function removeBlackoutTool(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const id = typeof args.blackout_id === 'string' ? args.blackout_id : '';
+  const date = typeof args.date === 'string' ? args.date : '';
+
+  if (id) {
+    await removeBlackout(ctx.db, id, ctx.actor);
+    return { ok: true, data: { removed: id, note: 'The time is back on the table and the plan re-ran.' } };
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { ok: false, refused: 'Which one? Give me the date (YYYY-MM-DD) or the exact id.' };
+  }
+
+  const dayStart = new Date(`${date}T00:00:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+  const { data } = await ctx.db.from('blackouts')
+    .select('id, starts_at, ends_at, reason')
+    .gte('starts_at', dayStart.toISOString())
+    .lt('starts_at', dayEnd.toISOString());
+
+  const found = data ?? [];
+  if (found.length === 0) return { ok: false, refused: `Nothing is blacked out on ${date}.` };
+  if (found.length > 1) {
+    return {
+      ok: false,
+      refused: `${found.length} blackouts exist on ${date} — name one by id.`,
+      alternative: found
+        .map((b) => `${b.id}: ${b.starts_at.slice(11, 16)}–${b.ends_at.slice(11, 16)} (${b.reason ?? 'no reason'})`)
+        .join('; '),
+    };
+  }
+
+  await removeBlackout(ctx.db, found[0].id, ctx.actor);
+  return {
+    ok: true,
+    data: { removed_date: date, reason: found[0].reason, note: 'The time is back on the table and the plan re-ran.' },
+  };
+}
+
+async function capacityException(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const date = String(args.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, refused: 'I need the date as YYYY-MM-DD.' };
+
+  const lost = Math.round(Number(args.unavailable_minutes ?? 0));
+  if (!Number.isFinite(lost) || lost <= 0) {
+    return {
+      ok: false,
+      refused: 'How much of the day is lost, in minutes? A negative or zero exception changes nothing — and extending a day is a Settings change.',
+    };
+  }
+
+  const weekday = new Date(`${date}T12:00:00`).getDay();
+  const { data: rule } = await ctx.db.from('capacity_rules')
+    .select('start_time, end_time')
+    .eq('weekday', weekday)
+    .maybeSingle();
+  if (!rule) {
+    return { ok: false, refused: `${date} is not a working day, so there is no capacity to reduce.` };
+  }
+
+  // The lost time comes off the end of the working window: the operator
+  // said how much of the day exists, not which hours — and losing the tail
+  // is the reading that moves the least work.
+  const [eh, em] = String(rule.end_time).slice(0, 5).split(':').map(Number);
+  const [sh, sm] = String(rule.start_time).slice(0, 5).split(':').map(Number);
+  const endMinutes = eh * 60 + em;
+  const startMinutes = sh * 60 + sm;
+  const windowLength = endMinutes > startMinutes
+    ? endMinutes - startMinutes
+    : (1440 - startMinutes) + endMinutes;
+
+  if (lost >= windowLength) {
+    return {
+      ok: false,
+      refused: `That is the whole day (the window is ${hm(windowLength)}) — black the day out instead.`,
+      alternative: `Say: add a blackout on ${date} from ${String(rule.start_time).slice(0, 5)} to ${String(rule.end_time).slice(0, 5)}.`,
+    };
+  }
+
+  const blackoutStart = (endMinutes - lost + 1440) % 1440;
+  const toClock = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  const added = await addBlackout(ctx.db, {
+    date,
+    start: toClock(blackoutStart),
+    end: String(rule.end_time).slice(0, 5),
+    reason: typeof args.reason === 'string' && args.reason
+      ? `Capacity exception — ${args.reason}`
+      : 'Capacity exception',
+  }, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      date,
+      minutes_off_capacity: added.minutes,
+      taken_from: `${toClock(blackoutStart)}–${String(rule.end_time).slice(0, 5)}`,
+      note: 'Recorded as a blackout at the end of the day; remove it in Settings to undo.',
+    },
+  };
+}
+
+async function createRecurrence(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const title = String(args.title ?? '').trim();
+  if (!title) return { ok: false, refused: 'The rule needs a title.' };
+
+  const priority = PRIORITY_WORDS[String(args.priority ?? '').toLowerCase()];
+  if (!priority) {
+    return { ok: false, refused: 'Priority is yours to set — tell me critical, high, normal or low.' };
+  }
+
+  const client = await resolveClient(ctx, String(args.client ?? ''));
+  if (!client) return { ok: false, refused: `No client matches “${args.client}”.` };
+
+  const est = Number(args.est_minutes ?? 0);
+  if (!Number.isFinite(est) || est <= 0) {
+    return { ok: false, refused: 'I need an estimate in minutes for each occurrence.' };
+  }
+
+  const frequency = String(args.frequency ?? '');
+  if (!['every_n_days', 'weekly', 'monthly'].includes(frequency)) {
+    return { ok: false, refused: 'The cadence must be every_n_days, weekly or monthly.' };
+  }
+
+  const rule = await createRecurrenceRule(ctx.db, {
+    clientId: client.id,
+    title,
+    priority,
+    estMinutes: Math.round(est),
+    frequency: frequency as 'every_n_days' | 'weekly' | 'monthly',
+    weekday: args.weekday === undefined ? null : Number(args.weekday),
+    monthDay: args.month_day === undefined ? null : Number(args.month_day),
+    intervalN: args.interval_n === undefined ? 1 : Number(args.interval_n),
+    clientVisible: false,
+  }, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      created_rule: rule.title,
+      client: client.name,
+      frequency,
+      est_minutes: rule.est_minutes,
+      note: 'Occurrences it creates stay internal. Pausing or deleting the rule lives in Settings.',
+    },
+  };
+}
+
+async function pauseRecurrence(ctx: ToolContext, ruleRef: string): Promise<ToolResult> {
+  if (!ruleRef) return { ok: false, refused: 'Which rule? Name it.' };
+
+  const { data } = await ctx.db.from('recurrence_rules').select('*');
+  const rules = (data ?? []) as RecurrenceRule[];
+
+  const needle = ruleRef.toLowerCase();
+  const matches = rules.filter(
+    (r) => r.id === ruleRef || r.title.toLowerCase().includes(needle),
+  );
+
+  if (matches.length === 0) return { ok: false, refused: `No recurring rule matches “${ruleRef}”.` };
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      refused: `${matches.length} rules match — which one?`,
+      alternative: matches.map((r) => r.title).join('; '),
+    };
+  }
+  if (!matches[0].active) {
+    return { ok: false, refused: `"${matches[0].title}" is already paused.` };
+  }
+
+  await setRecurrenceActive(ctx.db, matches[0].id, false, ctx.actor);
+  return {
+    ok: true,
+    data: {
+      paused: matches[0].title,
+      note: 'It creates nothing until you resume it in Settings.',
+    },
+  };
+}
+
+async function reportDraft(ctx: ToolContext, clientName: string, regenerate: boolean): Promise<ToolResult> {
+  const client = await resolveClient(ctx, clientName);
+  if (!client) return { ok: false, refused: `No client matches “${clientName}”.` };
+
+  const updates = await listUpdates(ctx.db, client.id);
+  const existingDraft = updates.find((u) => u.status === 'draft');
+
+  if (existingDraft && !regenerate) {
+    return {
+      ok: false,
+      refused: `A draft for ${client.name} is already waiting for your approval.`,
+      alternative: 'Say "regenerate" to throw it away and draft afresh, or open it on the Updates screen.',
+    };
+  }
+
+  if (existingDraft && regenerate) {
+    await ctx.db.from('client_updates').delete().eq('id', existingDraft.id).eq('status', 'draft');
+  }
+
+  const draft = await generateUpdateDraft(ctx.db, client.id, ctx.now);
+
+  return {
+    ok: true,
+    data: {
+      drafted_for: client.name,
+      draft_id: draft.id,
+      period: `${draft.period_start} to ${draft.period_end}`,
+      generated_by: draft.generated_by,
+      note: 'It is a draft with its evidence attached — nothing reaches the client until you publish it.',
+    },
+  };
+}
+
+async function createTouchpoint(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const client = await resolveClient(ctx, String(args.client ?? ''));
+  if (!client) return { ok: false, refused: `No client matches “${args.client}”.` };
+
+  const priority = args.priority === undefined
+    ? 4
+    : PRIORITY_WORDS[String(args.priority).toLowerCase()];
+  if (!priority) return { ok: false, refused: 'Priority must be critical, high, normal or low.' };
+
+  const note = typeof args.note === 'string' && args.note.trim() ? args.note.trim() : null;
+
+  const created = await createWork(ctx.db, {
+    clientId: client.id,
+    title: `Touch base — ${client.name}`,
+    priority,
+    estMinutes: 15,
+    mode: 'operational',
+    description: note,
+    clientVisible: false,
+    isTouchpoint: true,
+    origin: 'assistant',
+  });
+
+  return {
+    ok: true,
+    data: {
+      touchpoint: created.title,
+      id: created.id,
+      priority_note: args.priority === undefined ? 'Priority set Low — change it if it matters more.' : undefined,
+      note: 'Internal only: reaching out is still something you do, not something I send.',
+    },
+  };
+}
+
+async function applyEstimateSuggestion(ctx: ToolContext, workId: string): Promise<ToolResult> {
+  const before = await getWork(ctx.db, workId);
+  if (!before) return { ok: false, refused: 'I cannot find that work item.' };
+
+  const mode = (before.mode ?? 'operational') as WorkMode;
+  const distribution = await referenceClassFor(ctx.db, before.title, mode);
+
+  if (distribution.status !== 'ready') {
+    return {
+      ok: false,
+      refused: `Only ${distribution.samples} similar completed job${distribution.samples === 1 ? '' : 's'} on record — not enough evidence to override your estimate.`,
+    };
+  }
+
+  if (distribution.median === before.est_minutes) {
+    return {
+      ok: false,
+      refused: `The reference class agrees with the current estimate (${hm(before.est_minutes ?? 0)}) — nothing to change.`,
+    };
+  }
+
+  await updateWork(ctx.db, workId, {
+    estMinutes: distribution.median,
+    estimateReason: `reference class median over ${distribution.samples} similar jobs`,
+  }, ctx.actor);
+
+  return {
+    ok: true,
+    data: {
+      updated: before.title,
+      was_minutes: before.est_minutes,
+      now_minutes: distribution.median,
+      based_on: `${distribution.samples} completed ${distribution.label} jobs (fastest ${hm(distribution.fastest)}, slowest ${hm(distribution.slowest)})`,
+    },
+    undo: { taskId: workId, before: { estMinutes: before.est_minutes } },
   };
 }
 

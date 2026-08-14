@@ -7,6 +7,8 @@ import { requireOperator } from '@/lib/auth';
 import { deleteLogin } from '@/lib/authFlow';
 import { replan } from '@/data/planning';
 import { refreshSignals } from '@/data/attention';
+import { addBlackout, removeBlackout } from '@/data/blackouts';
+import { setRecurrenceActive } from '@/data/recurrence';
 import { recordAudit } from '@/lib/audit';
 import { MODES, type WorkMode } from '@/engines/planner/types';
 
@@ -141,7 +143,7 @@ export async function saveWorkingHoursAction(form: FormData) {
 // ───────────────────────── blackouts ─────────────────────────
 
 export async function addBlackoutAction(form: FormData) {
-  const { supabase } = await requireOperator();
+  const { session, supabase } = await requireOperator();
 
   const date = String(form.get('date') ?? '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -153,40 +155,34 @@ export async function addBlackoutAction(form: FormData) {
   if (!/^\d{2}:\d{2}/.test(start) || !/^\d{2}:\d{2}/.test(end)) {
     backToSettings('A blackout needs a start and an end time.');
   }
-  const reason = String(form.get('reason') ?? '').trim() || null;
 
-  const [y, m, d] = date.split('-').map(Number);
-  const [sh, sm] = start.slice(0, 5).split(':').map(Number);
-  const [eh, em] = end.slice(0, 5).split(':').map(Number);
-
-  const startsAt = new Date(y, m - 1, d, sh, sm);
-  const endsAt = new Date(y, m - 1, d, eh, em);
-  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+  try {
+    // One write path with the assistant's add_blackout tool. It replans.
+    await addBlackout(supabase, {
+      date, start, end,
+      reason: String(form.get('reason') ?? '').trim() || null,
+    }, session.email);
+  } catch {
     backToSettings('That date and time could not be read — check them and try again.');
   }
-  // Same rule as a zone: an end at or before the start runs into the next day.
-  if (endsAt <= startsAt) endsAt.setDate(endsAt.getDate() + 1);
 
-  const { error } = await supabase.from('blackouts').insert({
-    starts_at: startsAt.toISOString(),
-    ends_at: endsAt.toISOString(),
-    reason,
-  });
-
-  if (error) throw new Error(error.message);
-
-  await replanAndRevalidate(supabase);
+  await refreshSignals(supabase);
+  revalidatePath('/settings');
+  revalidatePath('/');
+  revalidatePath('/work');
 }
 
 export async function removeBlackoutAction(form: FormData) {
-  const { supabase } = await requireOperator();
+  const { session, supabase } = await requireOperator();
   const id = String(form.get('id') ?? '');
   if (!id) throw new Error('a blackout id is required');
 
-  const { error } = await supabase.from('blackouts').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  await removeBlackout(supabase, id, session.email);
 
-  await replanAndRevalidate(supabase);
+  await refreshSignals(supabase);
+  revalidatePath('/settings');
+  revalidatePath('/');
+  revalidatePath('/work');
 }
 
 // ───────────────────────── recurring work ─────────────────────────
@@ -203,20 +199,8 @@ export async function toggleRecurrenceAction(form: FormData) {
   const active = form.get('active') === 'true';
   if (!id) throw new Error('a rule id is required');
 
-  const { error } = await supabase.from('recurrence_rules')
-    .update({ active, updated_at: new Date().toISOString() })
-    .eq('id', id);
-
-  if (error) throw new Error(error.message);
-
-  await recordAudit({
-    type: 'recurrence_changed',
-    subjectTable: 'recurrence_rules',
-    subjectId: id,
-    actor: session.email,
-    after: { active },
-    note: active ? 'rule resumed' : 'rule paused',
-  });
+  // Same write path as the assistant's pause_recurrence tool.
+  await setRecurrenceActive(supabase, id, active, session.email);
 
   revalidatePath('/settings');
 }

@@ -7,11 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { provisionClientLogin, setLoginDisabled, deleteLogin } from '@/lib/authFlow';
 import { recordAudit } from '@/lib/audit';
 import { CLIENT_COLORS } from '@/data/types';
-import { createDraft, editDraft, publishUpdate } from '@/data/updates';
-import { listWork } from '@/data/work';
-import { getClient } from '@/data/clients';
-import { draftClientUpdate } from '@/ai/jobs/clientUpdate';
-import { dateKey } from '@/lib/format';
+import { editDraft, generateUpdateDraft, publishUpdate } from '@/data/updates';
 
 /**
  * Draft an update from recorded activity.
@@ -24,41 +20,7 @@ export async function draftUpdateAction(form: FormData) {
   const clientId = String(form.get('client_id') ?? '');
   if (!clientId) throw new Error('client_id is required');
 
-  const client = await getClient(supabase, clientId);
-  if (!client) throw new Error('client not found');
-
-  const periodEnd = new Date();
-  const periodStart = new Date(periodEnd.getTime() - 7 * 86_400_000);
-  const work = await listWork(supabase, { clientId });
-  const visible = work.filter((w) => w.client_visible);
-
-  const draft = await draftClientUpdate({
-    clientName: client.name,
-    locale: 'en',
-    periodStart: dateKey(periodStart),
-    periodEnd: dateKey(periodEnd),
-    completed: visible
-      .filter((w) => w.status === 'done' && w.completed_at && new Date(w.completed_at) >= periodStart)
-      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, completed_at: w.completed_at })),
-    inProgress: visible
-      .filter((w) => w.status === 'in_progress' || w.status === 'scheduled')
-      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, committed_date: w.committed_date })),
-    waitingOnClient: visible
-      .filter((w) => w.status === 'waiting_on_client' || w.status === 'blocked')
-      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, reason: w.blocked_reason })),
-    upcoming: visible
-      .filter((w) => w.status === 'backlog')
-      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title })),
-  });
-
-  await createDraft(supabase, {
-    clientId,
-    periodStart: dateKey(periodStart),
-    periodEnd: dateKey(periodEnd),
-    body: draft.body,
-    evidence: draft.evidence,
-    generatedBy: draft.source,
-  });
+  await generateUpdateDraft(supabase, clientId);
 
   revalidatePath(`/clients/${clientId}`);
 }

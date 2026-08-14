@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { recordAudit } from '@/lib/audit';
 import { createWork } from './work';
 import { dateKey } from '@/lib/format';
 
@@ -56,6 +57,78 @@ export function nextDue(rule: RecurrenceRule, today: Date): Date | null {
   const due = new Date(today.getFullYear(), today.getMonth(), day);
   if (last && last >= due) return null;
   return due;
+}
+
+export type CreateRecurrenceInput = {
+  clientId: string;
+  title: string;
+  /** Passed through from the operator's own words, never chosen (INV-1). */
+  priority: number;
+  estMinutes: number;
+  frequency: 'every_n_days' | 'weekly' | 'monthly';
+  intervalN?: number;
+  weekday?: number | null;
+  monthDay?: number | null;
+  clientVisible?: boolean;
+  workType?: string | null;
+};
+
+/**
+ * A new rule is a standing authorisation, so creating one is audited as a
+ * decision in its own right. One write path for Settings and the assistant.
+ */
+export async function createRecurrenceRule(
+  db: SupabaseClient,
+  input: CreateRecurrenceInput,
+  actor?: string,
+): Promise<RecurrenceRule> {
+  const { data, error } = await db.from('recurrence_rules').insert({
+    client_id: input.clientId,
+    title: input.title,
+    work_type: input.workType ?? null,
+    est_minutes: input.estMinutes,
+    priority: input.priority,
+    client_visible: input.clientVisible ?? false,
+    frequency: input.frequency,
+    interval_n: Math.max(1, input.intervalN ?? 1),
+    weekday: input.weekday ?? null,
+    month_day: input.monthDay ?? null,
+    active: true,
+  }).select('*').single();
+  if (error || !data) throw new Error(error?.message ?? 'insert failed');
+
+  await recordAudit({
+    type: 'recurrence_created',
+    subjectTable: 'recurrence_rules',
+    subjectId: data.id,
+    actor,
+    after: { title: input.title, frequency: input.frequency, est_minutes: input.estMinutes },
+    note: 'standing authorisation created',
+  });
+
+  return data as RecurrenceRule;
+}
+
+/** Pause or resume a rule. Shared by the Settings buttons and the assistant. */
+export async function setRecurrenceActive(
+  db: SupabaseClient,
+  id: string,
+  active: boolean,
+  actor?: string,
+): Promise<void> {
+  const { error } = await db.from('recurrence_rules')
+    .update({ active, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+
+  await recordAudit({
+    type: 'recurrence_changed',
+    subjectTable: 'recurrence_rules',
+    subjectId: id,
+    actor,
+    after: { active },
+    note: active ? 'rule resumed' : 'rule paused',
+  });
 }
 
 /**

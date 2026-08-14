@@ -424,6 +424,133 @@ export async function pushWork(db: SupabaseClient, id: string, actor?: string): 
   await replan(db);
 }
 
+/**
+ * Split one work item into two consecutive pieces.
+ *
+ * The original keeps its identity, dates and visibility with the first
+ * share of the estimate; the rest becomes a second item of the same shape.
+ * The caller enforces the mode's minimum block on both pieces — a split
+ * that produces an unschedulable sliver is refused before reaching here.
+ */
+export async function splitWork(
+  db: SupabaseClient,
+  id: string,
+  firstMinutes: number,
+  actor?: string,
+): Promise<{ first: WorkRow; second: WorkRow }> {
+  const before = await getWork(db, id);
+  if (!before) throw new Error('work item not found');
+
+  const total = before.est_minutes ?? 0;
+  const rest = total - firstMinutes;
+  if (firstMinutes <= 0 || rest <= 0) throw new Error('both pieces need real minutes');
+
+  const first = await updateWork(db, id, {
+    estMinutes: firstMinutes,
+    estimateReason: 'split — first part',
+  }, actor);
+
+  const second = await createWork(db, {
+    clientId: before.client_id,
+    title: `${before.title} (part 2)`,
+    clientTitle: before.client_title ? `${before.client_title} (part 2)` : null,
+    description: before.description,
+    workType: before.work_type,
+    priority: before.priority,
+    estMinutes: rest,
+    internalTarget: before.internal_target,
+    clientVisible: before.client_visible,
+    mode: (before.mode ?? 'operational') as WorkMode,
+    origin: 'split',
+    estimateReason: 'split — second part',
+  });
+
+  await recordAudit({
+    type: 'work_split',
+    subjectTable: 'tasks',
+    subjectId: id,
+    actor,
+    before: { est_minutes: total },
+    after: { first_minutes: firstMinutes, second_minutes: rest, second_id: second.id },
+  });
+
+  return { first, second };
+}
+
+/**
+ * Pin a work item's scheduled blocks so a replan cannot move them — or
+ * release them. Pinning is a statement about the future, so only blocks
+ * that have not started yet are touched.
+ */
+export async function pinWork(
+  db: SupabaseClient,
+  id: string,
+  pinned: boolean,
+  actor?: string,
+): Promise<number> {
+  const { data } = await db.from('schedule_blocks')
+    .select('id')
+    .eq('task_id', id)
+    .gte('starts_at', new Date().toISOString());
+  const blocks = data ?? [];
+  if (blocks.length === 0) return 0;
+
+  await db.from('schedule_blocks')
+    .update({ is_locked: pinned })
+    .in('id', blocks.map((b) => b.id));
+
+  await recordAudit({
+    type: pinned ? 'work_pinned' : 'work_unpinned',
+    subjectTable: 'tasks',
+    subjectId: id,
+    actor,
+    note: `${blocks.length} scheduled block${blocks.length === 1 ? '' : 's'}`,
+  });
+
+  return blocks.length;
+}
+
+/**
+ * Stop working on an item without finishing it. Records the minutes if
+ * they are known (a skipped number stays unknown — INV-10), returns the
+ * item to the plan, and replans.
+ */
+export async function stopWork(
+  db: SupabaseClient,
+  id: string,
+  minutes: number | null,
+  actor?: string,
+): Promise<void> {
+  const { data: current } = await db.from('tasks')
+    .select('actual_minutes, status').eq('id', id).maybeSingle();
+  if (!current) throw new Error('work item not found');
+
+  if (minutes !== null && minutes > 0) {
+    await db.from('effort_records').insert({
+      task_id: id,
+      minutes,
+      source: 'timer',
+      ended_at: new Date().toISOString(),
+    });
+    await db.from('tasks')
+      .update({ actual_minutes: (current.actual_minutes ?? 0) + minutes })
+      .eq('id', id);
+  }
+
+  await db.from('tasks').update({ status: 'backlog' }).eq('id', id);
+
+  await recordAudit({
+    type: 'work_stopped',
+    subjectTable: 'tasks',
+    subjectId: id,
+    actor,
+    after: { minutes_recorded: minutes },
+    note: minutes === null ? 'stopped with no recorded duration' : undefined,
+  });
+
+  await replan(db);
+}
+
 export async function estimateHistoryFor(db: SupabaseClient, taskId: string) {
   const { data } = await db.from('estimate_history')
     .select('est_minutes, reason, created_at')

@@ -83,4 +83,32 @@ describe('the executable tool list', () => {
       expect(offered.has(name)).toBe(true);
     }
   });
+
+  it('has a schema for EVERY declared DIRECT tool — no promised-but-missing names', () => {
+    // The audit found 20 tools declared in the registry that the model
+    // could never actually call. This pins the registry and the schemas
+    // together: declaring a capability now requires shipping it.
+    for (const name of DIRECT_TOOLS) {
+      expect(TOOL_SCHEMAS[name], `${name} is declared DIRECT but has no schema`).toBeTruthy();
+    }
+  });
+
+  it('dispatches every declared DIRECT tool — none fall through to "not implemented"', async () => {
+    const { runTool } = await import('./tools');
+    // A context whose db throws on first touch: reaching the implementation
+    // is enough — an unimplemented name returns its distinctive refusal
+    // BEFORE touching the database, which is what this catches.
+    const explodingDb = new Proxy({}, {
+      get() { throw new Error('db touched — implementation exists'); },
+    });
+    const ctx = { db: explodingDb as never, actor: 'test', now: new Date('2026-08-14T10:00:00Z') };
+
+    for (const name of DIRECT_TOOLS) {
+      const result = await runTool(name, {}, ctx);
+      if (!result.ok) {
+        expect(result.refused, `${name} fell through the dispatch switch`)
+          .not.toContain('not implemented');
+      }
+    }
+  });
 });

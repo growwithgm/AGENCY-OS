@@ -120,6 +120,59 @@ export async function publishUpdate(db: SupabaseClient, id: string, actor?: stri
   }, `${env.APP_URL}/portal`);
 }
 
+/**
+ * Build a draft update for one client from the last week's recorded work.
+ *
+ * One generation path for everything that drafts: the weekly cron, the
+ * Draft button on the client screen, and the assistant's
+ * generate_report_draft tool. The draft is never published here (INV-7).
+ */
+export async function generateUpdateDraft(
+  db: SupabaseClient,
+  clientId: string,
+  now = new Date(),
+): Promise<ClientUpdate> {
+  const [{ getClient }, { listWork }, { draftClientUpdate }, { dateKey }] = await Promise.all([
+    import('./clients'), import('./work'), import('@/ai/jobs/clientUpdate'), import('@/lib/format'),
+  ]);
+
+  const client = await getClient(db, clientId);
+  if (!client) throw new Error('client not found');
+
+  const periodEnd = now;
+  const periodStart = new Date(periodEnd.getTime() - 7 * 86_400_000);
+  const work = await listWork(db, { clientId });
+  const visible = work.filter((w) => w.client_visible);
+
+  const draft = await draftClientUpdate({
+    clientName: client.name,
+    locale: 'en',
+    periodStart: dateKey(periodStart),
+    periodEnd: dateKey(periodEnd),
+    completed: visible
+      .filter((w) => w.status === 'done' && w.completed_at && new Date(w.completed_at) >= periodStart)
+      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, completed_at: w.completed_at })),
+    inProgress: visible
+      .filter((w) => w.status === 'in_progress' || w.status === 'scheduled')
+      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, committed_date: w.committed_date })),
+    waitingOnClient: visible
+      .filter((w) => w.status === 'waiting_on_client' || w.status === 'blocked')
+      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title, reason: w.blocked_reason })),
+    upcoming: visible
+      .filter((w) => w.status === 'backlog')
+      .map((w) => ({ task_id: w.id, title: w.client_title ?? w.title })),
+  });
+
+  return createDraft(db, {
+    clientId,
+    periodStart: dateKey(periodStart),
+    periodEnd: dateKey(periodEnd),
+    body: draft.body,
+    evidence: draft.evidence,
+    generatedBy: draft.source,
+  });
+}
+
 /** A correction is a new version, never an edit of what was sent (INV-12). */
 export async function correctUpdate(db: SupabaseClient, id: string, body: string): Promise<ClientUpdate> {
   const original = await getUpdate(db, id);

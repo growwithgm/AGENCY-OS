@@ -19,6 +19,7 @@ import { emailConfigured } from '@/portal/digest';
 import { ClientName, ModeChip, StatusChip } from '@/components/marks';
 import { PortalAccess } from '../PortalAccess';
 import { ClientSettings } from '../ClientSettings';
+import { draftUpdateAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -292,6 +293,15 @@ export default async function ClientDetailPage({ params, searchParams }: {
 
       {tab === 'updates' && (
         <>
+          {drafts.length === 0 && (
+            <form action={draftUpdateAction} style={{ marginBottom: 12 }}>
+              <input type="hidden" name="client_id" value={client.id} />
+              <button type="submit" className="btn btn--sm">Draft an update now</button>
+              <span className="tiny dim" style={{ marginLeft: 10 }}>
+                From the last week&rsquo;s recorded work. It lands as a draft — nothing reaches {client.name} until you publish it.
+              </span>
+            </form>
+          )}
           {drafts.length === 0 && published.length === 0 && (
             <div className="card">
               <p className="muted">No updates for {client.name} yet.</p>
