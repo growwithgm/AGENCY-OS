@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireClient } from '@/lib/auth';
 import { ChangePasswordForm } from './ChangePasswordForm';
 
@@ -14,7 +15,7 @@ export default async function PortalAccountPage() {
       <p style={{ marginBottom: 24 }}>Signed in as {session.email}.</p>
       <ChangePasswordForm />
       <p className="small dim" style={{ marginTop: 28 }}>
-        <a href="/portal">Back to your work</a>
+        <Link href="/portal">Back to your work</Link>
       </p>
     </main>
   );

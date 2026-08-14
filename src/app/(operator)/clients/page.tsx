@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { clientSummaries } from '@/data/clients';
 import { hm, relativePhrase } from '@/lib/format';
@@ -52,7 +53,7 @@ export default async function ClientsPage() {
             || client.daysSincePublished >= NEGLECT_DAYS;
 
           return (
-            <a
+            <Link
               key={client.id}
               href={`/clients/${client.id}`}
               className="card"
@@ -89,7 +90,7 @@ export default async function ClientsPage() {
                   </span>
                 </div>
               </div>
-            </a>
+            </Link>
           );
         })}
       </div>

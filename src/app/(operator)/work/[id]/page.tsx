@@ -7,6 +7,7 @@
  * questions and only one of them is a promise.
  */
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { effortFor, estimateHistoryFor, getWork, referenceClassFor } from '@/data/work';
@@ -69,7 +70,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
           </div>
           <h1 className="page-title" style={{ textWrap: 'pretty' }}>{work.title}</h1>
         </div>
-        <a href="/work" className="btn btn--sm">All work</a>
+        <Link href="/work" className="btn btn--sm">All work</Link>
       </div>
 
       <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 14 }}>

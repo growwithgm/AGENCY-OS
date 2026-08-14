@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 /**
  * The soft floor under every operator screen. A thrown error — a bad form
  * value that slipped past validation, a database hiccup — lands here as a
@@ -18,7 +20,7 @@ export default function OperatorError({ reset }: { error: Error; reset: () => vo
         </p>
         <div className="row" style={{ gap: 8, marginTop: 14 }}>
           <button type="button" className="btn btn--primary" onClick={() => reset()}>Try again</button>
-          <a className="btn" href="/">Back to Today</a>
+          <Link className="btn" href="/">Back to Today</Link>
         </div>
       </div>
     </main>

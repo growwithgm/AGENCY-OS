@@ -6,6 +6,7 @@
  * (INV-7). Portal access is where every client login is created.
  */
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { getClient, clientContacts } from '@/data/clients';
@@ -90,12 +91,12 @@ export default async function ClientDetailPage({ params, searchParams }: {
             <ClientName name={client.name} colorIndex={client.color_index} />
           </h1>
         </div>
-        <a href="/clients" className="btn btn--sm">All clients</a>
+        <Link href="/clients" className="btn btn--sm">All clients</Link>
       </div>
 
       <nav className="chips" style={{ marginBottom: 18 }} aria-label="Sections">
         {TABS.map(([key, label]) => (
-          <a
+          <Link
             key={key}
             href={`/clients/${id}?tab=${key}`}
             className={`choice${tab === key ? ' choice--on' : ''}`}
@@ -108,7 +109,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
             {key === 'updates' && drafts.length > 0 && (
               <span className="num" style={{ marginLeft: 6 }}>{drafts.length}</span>
             )}
-          </a>
+          </Link>
         ))}
       </nav>
 
@@ -131,25 +132,25 @@ export default async function ClientDetailPage({ params, searchParams }: {
           </div>
 
           {openRequests.length > 0 && (
-            <a href="/requests" className="flag flag--wait" style={{ marginBottom: 16 }}>
+            <Link href="/requests" className="flag flag--wait" style={{ marginBottom: 16 }}>
               <span className="flag__dot" />
               <span>
                 {openRequests.length} request{openRequests.length === 1 ? '' : 's'} from {client.name} waiting
                 on you.
               </span>
-            </a>
+            </Link>
           )}
 
           <div className="grid-2">
             <section>
               <div className="section-label">
                 <span>Open work</span>
-                <a href={`/clients/${id}?tab=work`} className="tiny">All work</a>
+                <Link href={`/clients/${id}?tab=work`} className="tiny">All work</Link>
               </div>
               <div className="card">
                 <div className="rows">
                   {work.filter((w) => w.status !== 'done').slice(0, 8).map((item) => (
-                    <a
+                    <Link
                       key={item.id}
                       href={`/work/${item.id}`}
                       className="rows__row"
@@ -165,7 +166,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
                         </span>
                       </span>
                       <span className="small num dim">{hm(item.est_minutes ?? 0)}</span>
-                    </a>
+                    </Link>
                   ))}
                   {work.filter((w) => w.status !== 'done').length === 0 && (
                     <div className="rows__row"><span className="small dim">Nothing open right now.</span></div>
@@ -177,10 +178,10 @@ export default async function ClientDetailPage({ params, searchParams }: {
             <section>
               <div className="section-label">
                 <span>What they last read</span>
-                <a href={`/clients/${id}?tab=updates`} className="tiny">All updates</a>
+                <Link href={`/clients/${id}?tab=updates`} className="tiny">All updates</Link>
               </div>
               {published[0] ? (
-                <a
+                <Link
                   href={`/updates/${published[0].id}`}
                   className="card"
                   style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
@@ -195,7 +196,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
                   <p className="small dim" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
                     {published[0].body_md.slice(0, 280)}{published[0].body_md.length > 280 ? '…' : ''}
                   </p>
-                </a>
+                </Link>
               ) : (
                 <div className="card">
                   <p className="muted">Nothing published yet.</p>
@@ -207,10 +208,10 @@ export default async function ClientDetailPage({ params, searchParams }: {
               )}
 
               {drafts.length > 0 && (
-                <a href={`/updates/${drafts[0].id}`} className="flag flag--wait" style={{ marginTop: 12 }}>
+                <Link href={`/updates/${drafts[0].id}`} className="flag flag--wait" style={{ marginTop: 12 }}>
                   <span className="flag__dot" />
                   <span>A drafted update is waiting for your approval.</span>
-                </a>
+                </Link>
               )}
             </section>
           </div>
@@ -233,7 +234,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
                 <div className="card">
                   <div className="rows">
                     {rows.map((item) => (
-                      <a
+                      <Link
                         key={item.id}
                         href={`/work/${item.id}`}
                         className="rows__row"
@@ -250,7 +251,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
                           </span>
                         </span>
                         <span className="small num dim">{hm(item.est_minutes ?? 0)}</span>
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -270,7 +271,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
             <p className="muted">{client.name} has not asked for anything yet.</p>
           )}
           {requests.map((request) => (
-            <a
+            <Link
               key={request.id}
               href={`/requests/${request.id}`}
               className="rows__row"
@@ -283,7 +284,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
                 </span>
               </span>
               <span className="chip chip--pending">{request.state.replace('_', ' ')}</span>
-            </a>
+            </Link>
           ))}
           </div>
         </div>
@@ -300,7 +301,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
             </div>
           )}
           {[...drafts, ...published].map((update) => (
-            <a
+            <Link
               key={update.id}
               href={`/updates/${update.id}`}
               className="card"
@@ -317,7 +318,7 @@ export default async function ClientDetailPage({ params, searchParams }: {
               <p className="small dim" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
                 {update.body_md.slice(0, 160)}{update.body_md.length > 160 ? '…' : ''}
               </p>
-            </a>
+            </Link>
           ))}
         </>
       )}

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireClient } from '@/lib/auth';
 import { COPY } from '@/portal/copy';
 import { RequestFlow } from './RequestFlow';
@@ -10,7 +11,7 @@ export default async function PortalRequestPage() {
   return (
     <main className="portal">
       <div className="row row--between" style={{ marginBottom: 22 }}>
-        <a href="/portal" className="btn btn--sm btn--quiet">{COPY.request.close}</a>
+        <Link href="/portal" className="btn btn--sm btn--quiet">{COPY.request.close}</Link>
       </div>
       <RequestFlow />
     </main>

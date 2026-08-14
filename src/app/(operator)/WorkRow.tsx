@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { hm, hmShort, relativePhrase, shortDate } from '@/lib/format';
 import { PRIORITY_LABELS, type WorkMode } from '@/data/types';
@@ -110,7 +111,7 @@ export function WorkRow({ item, showActions = true }: { item: WorkRowData; showA
                   <button type="submit" className="btn btn--sm">Push</button>
                 </form>
 
-                <a href={`/work/${item.id}`} className="btn btn--sm btn--quiet">Open</a>
+                <Link href={`/work/${item.id}`} className="btn btn--sm btn--quiet">Open</Link>
               </div>
 
               <p className="tiny dim" style={{ marginTop: 8 }}>

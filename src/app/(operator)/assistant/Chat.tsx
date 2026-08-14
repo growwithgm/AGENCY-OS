@@ -16,6 +16,7 @@
  *      the same deterministic questions, with no prose at all.
  */
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ChatMessage } from '@/ai/runAI';
@@ -59,6 +60,18 @@ function humanKey(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/**
+ * Client text travels to the model fenced in CLIENT_TEXT markers so it can
+ * never read as instructions. The fence is for the model, not the human —
+ * strip it before anything is shown on screen.
+ */
+function stripClientMarkers(text: string): string {
+  return text
+    .replaceAll('<<<CLIENT_TEXT>>>', '')
+    .replaceAll('<<<END_CLIENT_TEXT>>>', '')
+    .trim();
+}
+
 function isDateKey(key: string, value: unknown): boolean {
   return typeof value === 'string'
     && /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -86,7 +99,7 @@ function RequestsFacts({ data }: { data: unknown }) {
       {rows.map((r) => (
         <div key={r.id} className="rows__row" style={{ alignItems: 'baseline' }}>
           <span className="small" style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 500 }}>{r.title}</span>
+            <span style={{ fontWeight: 500 }}>{stripClientMarkers(r.title)}</span>
             <span className="tiny dim" style={{ display: 'block' }}>
               {r.client ?? 'Unknown client'}
               {r.stated_urgency ? ` · they said: ${r.stated_urgency}` : ''}
@@ -139,7 +152,7 @@ function Value({ name, value }: { name: string; value: unknown }) {
     if (words.length === value.length) return <span>{words.map(humanKey).join(', ')}</span>;
     return <span><span className="num">{value.length}</span> entries</span>;
   }
-  if (typeof value === 'string') return <span>{value}</span>;
+  if (typeof value === 'string') return <span>{stripClientMarkers(value)}</span>;
   return <span className="dim">recorded</span>;
 }
 
@@ -272,7 +285,7 @@ function SearchFacts({ data }: { data: unknown }) {
       {matches.map((match, index) => (
         <div key={str(match.id) ?? index} className="rows__row" style={{ display: 'block' }}>
           <div className="spread">
-            <a href={`/work/${str(match.id) ?? ''}`}>{str(match.title) ?? 'Untitled work'}</a>
+            <Link href={`/work/${str(match.id) ?? ''}`}>{str(match.title) ?? 'Untitled work'}</Link>
             <span className="small"><ClientName name={str(match.client)} /></span>
           </div>
           <div className="tiny dim">
@@ -510,9 +523,9 @@ function ProposalPanel({
               ? 'This came back without a value I can read, so it is safer to set it on the work item yourself.'
               : 'I have not built this one into the chat, so it is done on its own screen where the full context is in front of you.'}
           </p>
-          <a className="btn btn--sm" style={{ marginTop: 8 }} href={screenFor(proposal.tool, args).href}>
+          <Link className="btn btn--sm" style={{ marginTop: 8 }} href={screenFor(proposal.tool, args).href}>
             {screenFor(proposal.tool, args).label}
-          </a>
+          </Link>
         </div>
       )}
     </section>
@@ -580,7 +593,7 @@ function TurnView({ turn, onApplied }: { turn: TurnResult; onApplied: (message: 
 
       {turn.answer && (
         <div className="card">
-          <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{turn.answer}</p>
+          <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{stripClientMarkers(turn.answer)}</p>
         </div>
       )}
 
@@ -603,7 +616,7 @@ function TurnView({ turn, onApplied }: { turn: TurnResult; onApplied: (message: 
           <div className="section-label" style={{ marginTop: 8 }}><span>Suggested actions</span></div>
           <div className="row" style={{ gap: 8 }}>
             {links.map((link) => (
-              <a key={link.href} className="btn btn--sm" href={link.href}>{link.label}</a>
+              <Link key={link.href} className="btn btn--sm" href={link.href}>{link.label}</Link>
             ))}
           </div>
         </div>

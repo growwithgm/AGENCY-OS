@@ -49,7 +49,16 @@ export type RunAIOpts = {
   messages: ChatMessage[];            // full session history, assistant messages verbatim
   maxTokens: number;                  // always explicit — provider default is 131,072
   schema?: object;                    // when set → strict JSON via response_format
+  timeoutMs?: number;                 // hard ceiling; default AI_TIMEOUT_MS
 };
+
+/**
+ * A provider that hangs must fail here, inside the app's own patience,
+ * not at the platform's 300s function ceiling — a caller that catches the
+ * abort can degrade honestly ("thinking took too long"), while a 504 page
+ * cannot. Every route through runAI/runAITools already has a catch path.
+ */
+export const AI_TIMEOUT_MS = 60_000;
 
 /**
  * Every LLM call in the system goes through here. Direct SDK calls are
@@ -73,7 +82,9 @@ export async function runAI<T = string>(opts: RunAIOpts): Promise<{ result: T; r
       }),
       // temperature / top_p / n / presence_penalty / frequency_penalty are
       // fixed on K3 — sending them is an API error (spec §8.2)
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
+      signal: AbortSignal.timeout(opts.timeoutMs ?? AI_TIMEOUT_MS),
+    });
 
     const msg = res.choices[0].message;
     await logRun({ kind: opts.kind, model: opts.model, usage: res.usage, ms: Date.now() - t0, ok: true });
@@ -120,7 +131,9 @@ export async function runAITools(opts: RunAIToolsOpts): Promise<{
       messages: [{ role: 'system', content: opts.system }, ...opts.messages],
       tools: opts.tools,
       tool_choice: 'auto',
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
+      signal: AbortSignal.timeout(opts.timeoutMs ?? AI_TIMEOUT_MS),
+    });
 
     const message = res.choices[0].message;
     await logRun({ kind: opts.kind, model: opts.model, usage: res.usage, ms: Date.now() - t0, ok: true });

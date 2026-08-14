@@ -6,6 +6,7 @@
  * the work item it came from, so the evidence is not behind a tab.
  */
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOperator } from '@/lib/auth';
 import { getUpdate, listUpdates, type ClientUpdate, type UpdateEvidence } from '@/data/updates';
@@ -59,7 +60,7 @@ export default async function UpdateDetailPage({ params }: { params: Promise<{ i
             <ClientName name={client?.name ?? 'Unknown client'} colorIndex={client?.color_index} />
           </h1>
         </div>
-        <a href="/updates" className="btn btn--sm">All updates</a>
+        <Link href="/updates" className="btn btn--sm">All updates</Link>
       </div>
 
       <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 14 }}>
@@ -116,9 +117,9 @@ export default async function UpdateDetailPage({ params }: { params: Promise<{ i
 
                     return (
                       <div key={`${item.task_id}-${item.sentence ?? 0}`} className="rows__row" style={{ display: 'block' }}>
-                        <a href={`/work/${item.task_id}`} className="small" style={{ fontWeight: 500 }}>
+                        <Link href={`/work/${item.task_id}`} className="small" style={{ fontWeight: 500 }}>
                           {internal}
-                        </a>
+                        </Link>
                         {clientFacing && clientFacing !== internal && (
                           <div className="tiny dim" style={{ marginTop: 2 }}>
                             They see this as &ldquo;{clientFacing}&rdquo;

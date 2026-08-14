@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { signalAction, signalHref, type OpenSignal } from '@/data/attention';
 
 /**
@@ -14,7 +15,7 @@ export function Flags({ signals, limit = 4 }: { signals: OpenSignal[]; limit?: n
   return (
     <div className="flags" style={{ marginTop: 12 }}>
       {shown.map((signal) => (
-        <a key={signal.id} href={signalHref(signal)} className={`flag ${severityClass(signal)}`}>
+        <Link key={signal.id} href={signalHref(signal)} className={`flag ${severityClass(signal)}`}>
           <span className="flag__dot" />
           <span style={{ flex: 1, color: 'var(--text)' }}>
             {signal.headline}
@@ -22,12 +23,12 @@ export function Flags({ signals, limit = 4 }: { signals: OpenSignal[]; limit?: n
               {signalAction(signal)}
             </span>
           </span>
-        </a>
+        </Link>
       ))}
       {signals.length > shown.length && (
-        <a href="/assistant" className="tiny dim" style={{ padding: '2px 4px' }}>
+        <Link href="/assistant" className="tiny dim" style={{ padding: '2px 4px' }}>
           {signals.length - shown.length} more
-        </a>
+        </Link>
       )}
     </div>
   );

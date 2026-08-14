@@ -72,6 +72,28 @@ psql -d <db> -f supabase/schema.sql                    # idempotent, safe to re-
 psql -d <db> -f scripts/verify-portal-isolation.sql    # proves a client sees only their own
 ```
 
+## Cron (cron-job.org)
+
+Five scheduled jobs keep the system honest: nightly replan, the morning
+attention push, the three delivery windows, Thursday's update drafts and
+Friday's client digest. They run from an **external scheduler** —
+`vercel.json` deliberately declares no crons, because the windows job runs
+three times a day and Vercel's Hobby plan allows one run per day.
+
+One command sets all five up on [cron-job.org](https://cron-job.org)
+(idempotent — re-run it after changing the app URL or the secret):
+
+```bash
+CRONJOB_API_KEY=... APP_URL=https://your-app.vercel.app CRON_SECRET=... \
+  node scripts/setup-cronjobs.mjs
+```
+
+The secret is sent as the `x-cron-secret` header, never in the URL. The
+full route-by-route table, and the timezone rule (`APP_TIMEZONE` and `TZ`
+must be set, and equal), are in [docs/SETUP.md](docs/SETUP.md) §6. Today
+and Settings watch the heartbeat: if nothing has planned for 36 hours, the
+operator is told instead of trusting a stale plan.
+
 ## What it deliberately is not
 
 No Kanban, no Gantt, no percentage-complete, no automatic priority scoring,
@@ -86,5 +108,5 @@ of business data.
 ## Stack
 
 Next.js 15 App Router, React 19, TypeScript, Supabase (Postgres + Auth +
-RLS), Vitest. Deployed on Vercel; cron runs either from `vercel.json` or an
-external scheduler.
+RLS), Vitest. Deployed on Vercel; cron runs from an external scheduler
+(see the cron section above — `vercel.json` declares none on purpose).

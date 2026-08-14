@@ -5,6 +5,7 @@
  * human before anyone reads it. Published rows are history.
  */
 
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { listClients } from '@/data/clients';
 import { listUpdates, pendingUpdates, type ClientUpdate } from '@/data/updates';
@@ -94,7 +95,7 @@ function UpdateRow({ update, client }: { update: ClientUpdate; client: ClientRow
   const when = update.published_at ?? update.created_at;
 
   return (
-    <a
+    <Link
       href={`/updates/${update.id}`}
       className={`card ${isDraft ? 'card--wait' : ''}`}
       style={{ display: 'block', color: 'var(--ink-900)', textDecoration: 'none' }}
@@ -121,6 +122,6 @@ function UpdateRow({ update, client }: { update: ClientUpdate; client: ClientRow
           </>
         )}
       </div>
-    </a>
+    </Link>
   );
 }

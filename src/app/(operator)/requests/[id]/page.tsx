@@ -6,6 +6,7 @@
  * recorded actuals. No model is involved anywhere on this page (INV-2).
  */
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireOperator } from '@/lib/auth';
@@ -208,7 +209,7 @@ export default async function RequestDetailPage({ params, searchParams }: {
             <ClientName name={client?.name ?? request.clients?.name ?? null} colorIndex={client?.color_index} />
           </h1>
         </div>
-        <a href="/requests" className="btn btn--sm">All requests</a>
+        <Link href="/requests" className="btn btn--sm">All requests</Link>
       </div>
 
       <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
@@ -336,14 +337,14 @@ export default async function RequestDetailPage({ params, searchParams }: {
               </span>
               <div className="chips">
                 {MODES.map((option) => (
-                  <a
+                  <Link
                     key={option}
                     href={`/requests/${request.id}?mode=${option}`}
                     className={`choice${mode === option ? ' choice--on' : ''}`}
                     aria-current={confirmedMode === option ? 'true' : undefined}
                   >
                     {MODE_LABELS[option]}
-                  </a>
+                  </Link>
                 ))}
               </div>
               <span className="tiny dim">
@@ -540,7 +541,7 @@ export default async function RequestDetailPage({ params, searchParams }: {
             {request.state === 'approved' && createdWork && (
               <>
                 <div className="spread">
-                  <a href={`/work/${createdWork.id}`} style={{ fontWeight: 500 }}>{createdWork.title}</a>
+                  <Link href={`/work/${createdWork.id}`} style={{ fontWeight: 500 }}>{createdWork.title}</Link>
                   <span className="row" style={{ gap: 8, alignItems: 'baseline' }}>
                     <PriorityMark priority={createdWork.priority} />
                     <ModeChip mode={createdWork.mode} />

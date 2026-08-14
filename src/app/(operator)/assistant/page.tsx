@@ -20,6 +20,9 @@ import { hm } from '@/lib/format';
 import { Chat } from './Chat';
 
 export const dynamic = 'force-dynamic';
+// Room for a slow model turn: the AI client aborts at 60s per call and the
+// action catches it, so the operator gets a degraded answer, never a 504.
+export const maxDuration = 120;
 
 export default async function AssistantPage() {
   const { supabase } = await requireOperator();

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -38,10 +39,10 @@ export function Nav({ requestCount, operatorEmail, dateShort }: {
           Agency OS
         </div>
         {NAV.map((item) => (
-          <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+          <Link key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
             <span><span className="nav-ico">{item.icon}</span>{item.label}</span>
             {item.badged && requestCount > 0 && <span className="nav-badge">{requestCount}</span>}
-          </a>
+          </Link>
         ))}
         <div className="sidebar__foot">
           <div>Signed in as</div>
@@ -60,11 +61,11 @@ export function Nav({ requestCount, operatorEmail, dateShort }: {
 
       <nav className="tabbar" aria-label="Sections">
         {NAV.filter((item) => MOBILE.includes(item.href)).map((item) => (
-          <a key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+          <Link key={item.href} href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
             <span className="nav-ico">{item.icon}</span>
             <span>{item.short}</span>
             {item.badged && requestCount > 0 && <span className="tabbar__badge">{requestCount}</span>}
-          </a>
+          </Link>
         ))}
       </nav>
     </>

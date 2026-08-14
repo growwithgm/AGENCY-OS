@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { hm } from '@/lib/format';
 import { ClientName } from '@/components/marks';
 import { completeWorkAction, pushWorkAction } from './actions';
@@ -38,14 +39,14 @@ export function RunningNow({ item }: {
         </span>
       </div>
 
-      <a href={`/work/${item.id}`} style={{ display: 'block', paddingTop: 6, color: 'inherit', textDecoration: 'none' }}>
+      <Link href={`/work/${item.id}`} style={{ display: 'block', paddingTop: 6, color: 'inherit', textDecoration: 'none' }}>
         <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.01em' }}>{item.title}</div>
         <div className="small dim" style={{ marginTop: 2 }}>
           <ClientName name={item.clientName} colorIndex={item.colorIndex} />
           {' · '}
           <span className="num">{hm(left)}</span> left on the estimate
         </div>
-      </a>
+      </Link>
 
       <div className="row" style={{ gap: 6, marginTop: 10 }}>
         <form action={completeWorkAction} className="row" style={{ gap: 6 }}>

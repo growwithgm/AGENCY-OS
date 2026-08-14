@@ -453,6 +453,19 @@ a:hover { color: var(--blue-deep); text-decoration: underline; }
   padding: 0 2px;
 }
 
+/* ───────────────────────── loading skeletons ───────────────────────── */
+
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(16, 24, 32, .05), rgba(16, 24, 32, .1), rgba(16, 24, 32, .05));
+  background-size: 200% 100%;
+  animation: skeleton-slide 1.1s linear infinite;
+}
+@keyframes skeleton-slide { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
 /* A POST form's submit button that reads as a plain inline link (sign out). */
 button.as-link {
   appearance: none;

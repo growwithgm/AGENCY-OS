@@ -5,6 +5,7 @@
  * which is what makes "why is this on Thursday?" answerable a week later.
  */
 
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import {
   isRevertible,
@@ -102,7 +103,7 @@ export default async function ActivityPage({ searchParams }: {
         {FILTERS.map((filter) => {
           const active = filter.actor === actor;
           return (
-            <a
+            <Link
               key={filter.label}
               href={filter.actor ? `/activity?actor=${filter.actor}` : '/activity'}
               className={`choice${active ? ' choice--on' : ''}`}
@@ -115,7 +116,7 @@ export default async function ActivityPage({ searchParams }: {
               }}
             >
               {filter.label}
-            </a>
+            </Link>
           );
         })}
       </div>
@@ -225,7 +226,7 @@ function entityLine(entry: ActivityEntry, titleById: Map<string, string>) {
 
   if (entry.entity_type === 'tasks') {
     const title = titleById.get(entry.entity_id);
-    return <a href={`/work/${entry.entity_id}`}>{title ?? 'Open the work item'}</a>;
+    return <Link href={`/work/${entry.entity_id}`}>{title ?? 'Open the work item'}</Link>;
   }
 
   const label = ENTITY_LABELS[entry.entity_type] ?? entry.entity_type.replace(/_/g, ' ');

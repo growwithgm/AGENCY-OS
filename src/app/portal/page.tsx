@@ -11,6 +11,7 @@
  * anything else is a promise the operator did not make.
  */
 
+import Link from 'next/link';
 import { requireClient } from '@/lib/auth';
 import { COPY } from '@/portal/copy';
 import { RequestFlow } from './request/RequestFlow';
@@ -118,7 +119,7 @@ export default async function PortalHome() {
           </nav>
 
           <div className="cp-sidebar-bottom">
-            <a href="/portal/account">{say.account}</a>
+            <Link href="/portal/account">{say.account}</Link>
             <form action="/portal/signout" method="POST">
               <button type="submit" className="as-link">{say.signOut}</button>
             </form>
@@ -128,7 +129,7 @@ export default async function PortalHome() {
         <div className="cp-main" id="top">
           <header className="cp-topbar">
             <div className="cp-topbar-title">{say.shell.portalTitle}</div>
-            <a href="/portal/account" className="cp-avatar" aria-label={say.account}>{initials}</a>
+            <Link href="/portal/account" className="cp-avatar" aria-label={say.account}>{initials}</Link>
           </header>
 
           <div className="cp-content">

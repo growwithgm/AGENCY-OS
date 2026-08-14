@@ -8,12 +8,14 @@
  * to read.
  */
 
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { plan } from '@/engines/planner/plan';
 import { loadPlanInputs, todayView } from '@/data/planning';
 import { listClients } from '@/data/clients';
 import { openSignals } from '@/data/attention';
 import { unexplainedOverruns } from '@/data/work';
+import { cronHealth } from '@/data/cronHealth';
 import { dayShape } from '@/data/zones';
 import { hm, longDate, shortDate } from '@/lib/format';
 import { Capacity } from './Capacity';
@@ -29,13 +31,14 @@ export default async function TodayPage() {
   const { supabase } = await requireOperator();
   const now = new Date();
 
-  const [view, signals, planInput, shape, overruns, clients] = await Promise.all([
+  const [view, signals, planInput, shape, overruns, clients, heartbeat] = await Promise.all([
     todayView(supabase, now),
     openSignals(supabase),
     loadPlanInputs(supabase, now),
     dayShape(supabase, now),
     unexplainedOverruns(supabase),
     listClients(supabase),
+    cronHealth(supabase, now),
   ]);
 
   // Every client, not only those with work planned today — an overflow item
@@ -92,16 +95,30 @@ export default async function TodayPage() {
           label: shortDate(view.tomorrow.date),
           availableMinutes: view.tomorrow.availableMinutes,
           plannedMinutes: view.tomorrow.plannedMinutes,
-          overflowMinutes: 0,
+          // Derived, not assumed: normally zero because the planner respects
+          // the cap, but a blackout added after planning can overcommit the
+          // day and the rail must show that rather than 'spare'.
+          overflowMinutes: Math.max(0, view.tomorrow.plannedMinutes - view.tomorrow.availableMinutes),
         }}
       >
         {over && (
           <>
-            <a href="/work" className="btn btn--sm">Move something</a>
-            <a href="/assistant" className="btn btn--sm">Ask what to cut</a>
+            <Link href="/work" className="btn btn--sm">Move something</Link>
+            <Link href="/assistant" className="btn btn--sm">Ask what to cut</Link>
           </>
         )}
       </Capacity>
+
+      {heartbeat.stale && (
+        <div className="flag flag--risk" style={{ marginTop: 12 }}>
+          <span className="flag__dot" />
+          <span>
+            {heartbeat.lastPlanRun
+              ? <>The plan was last computed <span className="num">{Math.round(heartbeat.hoursSince ?? 0)}h</span> ago — the nightly job looks dead. Check the cron scheduler (Settings explains it), or make any change to re-plan now.</>
+              : <>Nothing has ever been planned. If the nightly cron is set up, it has not run — check the scheduler against docs/SETUP.md.</>}
+          </span>
+        </div>
+      )}
 
       {/* The working column and the glancing rail. On a real monitor the
           plan gets the width; what needs a look — running now, attention,

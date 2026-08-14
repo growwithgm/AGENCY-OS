@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { requireOperator } from '@/lib/auth';
 import { transcriptionConfigured } from '@/data/aiHealth';
@@ -34,10 +35,10 @@ export default async function OperatorLayout({ children }: { children: ReactNode
       <Nav requestCount={requestCount} operatorEmail={session.email} dateShort={dateShort} />
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {children}
-        <a className="fab" href="/capture" aria-label={`Capture work${draftCount ? ` — ${draftCount} in your inbox` : ''}`}>
+        <Link className="fab" href="/capture" aria-label={`Capture work${draftCount ? ` — ${draftCount} in your inbox` : ''}`}>
           +
           {draftCount > 0 && <span className="fab__count" aria-hidden>{draftCount}</span>}
-        </a>
+        </Link>
         <CommandK transcription={transcriptionConfigured()} />
       </div>
     </div>

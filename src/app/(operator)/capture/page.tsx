@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { listClients } from '@/data/clients';
 import { openDrafts, getDraft } from '@/data/capture';
@@ -8,6 +9,9 @@ import { discardDraftAction } from './actions';
 import type { CaptureState } from './actions';
 
 export const dynamic = 'force-dynamic';
+// Room for a slow model turn: the AI client aborts at 60s per call and the
+// action catches it, so the operator gets a degraded answer, never a 504.
+export const maxDuration = 120;
 
 /**
  * Capture — one large input, then a parsed draft to review.
@@ -60,7 +64,7 @@ export default async function CapturePage({
           <div className="eyebrow">New work</div>
           <h1 className="page-title">Capture</h1>
         </div>
-        <a href="/" className="btn btn--sm">Cancel</a>
+        <Link href="/" className="btn btn--sm">Cancel</Link>
       </div>
 
       <CaptureFlow clients={clientList} initial={initial} />
@@ -84,7 +88,7 @@ export default async function CapturePage({
                     {' · '}{relativePhrase(draft.created_at.slice(0, 10))}
                   </span>
                 </span>
-                <a href={`/capture?draft=${draft.id}`} className="btn btn--sm">Open</a>
+                <Link href={`/capture?draft=${draft.id}`} className="btn btn--sm">Open</Link>
                 <form action={discardDraftAction}>
                   <input type="hidden" name="draft_id" value={draft.id} />
                   <button type="submit" className="btn btn--sm btn--quiet">Discard</button>

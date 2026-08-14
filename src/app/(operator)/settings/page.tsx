@@ -16,6 +16,7 @@ import { ModeChip } from '@/components/marks';
 import { MODES, MODE_MIN_MINUTES } from '@/engines/planner/types';
 import { TIMEZONE } from '@/push/windows';
 import { pushConfigured } from '@/lib/env';
+import { cronHealth, STALE_AFTER_HOURS } from '@/data/cronHealth';
 import { PushDevices } from './PushDevices';
 import { ZoneEditor } from './ZoneEditor';
 import { DangerZone } from './DangerZone';
@@ -56,13 +57,14 @@ export default async function SettingsPage({ searchParams }: {
   const now = new Date();
   const { problem } = await searchParams;
 
-  const [zones, hoursRes, blackoutsRes, rulesRes, clients, notifyRes] = await Promise.all([
+  const [zones, hoursRes, blackoutsRes, rulesRes, clients, notifyRes, heartbeat] = await Promise.all([
     listZones(supabase),
     supabase.from('capacity_rules').select('weekday, start_time, end_time, max_minutes').order('weekday'),
     supabase.from('blackouts').select('id, starts_at, ends_at, reason').order('starts_at'),
     supabase.from('recurrence_rules').select('*').order('title'),
     listClients(supabase),
     supabase.from('notification_settings').select('kind, enabled'),
+    cronHealth(supabase, now),
   ]);
 
   const hoursFor = (weekday: number) => (hoursRes.data ?? []).find((r) => r.weekday === weekday);
@@ -360,6 +362,18 @@ export default async function SettingsPage({ searchParams }: {
           <p className="tiny dim" style={{ marginTop: 8, maxWidth: '68ch' }}>
             That list is a rule, not a preference: those two are the only things worth taking you
             out of your work for, so they are not switchable.
+          </p>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--hairline)', marginTop: 14, paddingTop: 12 }}>
+          <div className="label" style={{ marginBottom: 6 }}>Scheduler heartbeat</div>
+          <p className="small" style={{ color: heartbeat.stale ? 'var(--red)' : undefined }}>
+            {heartbeat.lastPlanRun
+              ? <>Last plan run <span className="num">{heartbeat.hoursSince}h</span> ago
+                  {heartbeat.stale
+                    ? <> — more than {STALE_AFTER_HOURS}h, so the nightly cron looks dead. Check your scheduler against the table in docs/SETUP.md §6.</>
+                    : '. The nightly job (or a replan) is keeping the plan fresh.'}</>
+              : <>No plan has ever been recorded. Set up the cron jobs in docs/SETUP.md §6, or make any change to plan now.</>}
           </p>
         </div>
 

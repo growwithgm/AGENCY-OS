@@ -6,6 +6,7 @@
  * browser has been holding since breakfast.
  */
 
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { listWork } from '@/data/work';
 import { getClient, listClients } from '@/data/clients';
@@ -90,7 +91,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
             <>
               <p className="muted">Nothing here matches the filters you have set.</p>
               <p className="tiny dim" style={{ marginTop: 6 }}>
-                Widen one of them, or <a href={grouped ? '/work?group=client' : '/work'}>clear them all</a>.
+                Widen one of them, or <Link href={grouped ? '/work?group=client' : '/work'}>clear them all</Link>.
               </p>
             </>
           ) : (
@@ -155,7 +156,7 @@ function Row({ work, client }: { work: WorkRow; client: ClientRow | null }) {
         style={{ width: 16, height: 16, flex: '0 0 16px', marginTop: 4 }}
       />
 
-      <a
+      <Link
         href={`/work/${work.id}`}
         style={{ flex: '1 1 240px', minWidth: 0, color: 'inherit', textDecoration: 'none' }}
       >
@@ -174,7 +175,7 @@ function Row({ work, client }: { work: WorkRow; client: ClientRow | null }) {
             <span className="tag tag--info">Target <span className="num">{shortDate(work.internal_target)}</span></span>
           )}
         </div>
-      </a>
+      </Link>
 
       <span className="num num--right muted" style={{ flex: '0 0 66px' }}>
         {hm(work.est_minutes ?? 0)}

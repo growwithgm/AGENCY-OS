@@ -5,6 +5,7 @@
  * capacity at all until it is approved (INV-3).
  */
 
+import Link from 'next/link';
 import { requireOperator } from '@/lib/auth';
 import { pendingRequests, requestsForClient, type ClientRequest, type RequestState } from '@/data/requests';
 import { listClients } from '@/data/clients';
@@ -69,7 +70,7 @@ export default async function RequestsPage() {
   const Row = ({ request }: { request: ClientRequest }) => {
     const { name, colorIndex } = clientOf(request);
     return (
-      <a
+      <Link
         href={`/requests/${request.id}`}
         className="rows__row"
         style={{ color: 'inherit', textDecoration: 'none' }}
@@ -84,7 +85,7 @@ export default async function RequestsPage() {
           </span>
           <span className={`chip ${STATE_CHIP[request.state]}`}>{STATE_LABEL[request.state]}</span>
         </span>
-      </a>
+      </Link>
     );
   };
 
