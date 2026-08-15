@@ -25,6 +25,7 @@ function collect() {
 const DECISIONS = [
   'set_priority', 'set_committed_date', 'approve_request', 'decline_request',
   'publish_update', 'archive_client', 'delete_task',
+  'create_client', 'create_client_login', 'reset_client_login', 'set_login_disabled',
 ];
 
 describe('the operator MCP surface', () => {

@@ -82,9 +82,11 @@ Two MCP endpoints, both guarded by `MCP_SECRET` (header `x-mcp-secret`,
 - `/api/mcp/assistant` — the whole app for Claude Code, claude.ai (custom
   connector), or the API's MCP connector: the in-app assistant's full
   toolset, the remaining reads (settings, inbox, cron health, AI usage),
-  and the operator decisions (priority, committed dates, approve/decline,
-  publish, archive, delete). Decisions live only here — the secret is the
-  operator's own credential — and each one requires an explicit
+  the operator decisions (priority, committed dates, approve/decline,
+  publish, archive, delete), and client management (create a client,
+  create/reset a portal login — the one-time password comes back in the
+  conversation — disable a login). Decisions live only here — the secret
+  is the operator's own credential — and each one requires an explicit
   `confirm: true` on the operator's say-so, audited like a tap in the app.
   The in-app assistant stays fenced exactly as before.
 
