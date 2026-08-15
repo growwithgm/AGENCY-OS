@@ -79,11 +79,14 @@ Two MCP endpoints, both guarded by `MCP_SECRET` (header `x-mcp-secret`,
 
 - `/api/mcp` — read and propose only (the plan, capacity, attention,
   simulations, park a capture in the Inbox).
-- `/api/mcp/assistant` — the in-app assistant's full DIRECT toolset, so
-  Claude Code, claude.ai (custom connector), or the API's MCP connector
-  can work the system directly. The fence travels with it: priority,
-  committed dates, approving requests, publishing, archiving and deleting
-  are structurally absent — those stay the operator's tap in the app.
+- `/api/mcp/assistant` — the whole app for Claude Code, claude.ai (custom
+  connector), or the API's MCP connector: the in-app assistant's full
+  toolset, the remaining reads (settings, inbox, cron health, AI usage),
+  and the operator decisions (priority, committed dates, approve/decline,
+  publish, archive, delete). Decisions live only here — the secret is the
+  operator's own credential — and each one requires an explicit
+  `confirm: true` on the operator's say-so, audited like a tap in the app.
+  The in-app assistant stays fenced exactly as before.
 
 ```bash
 claude mcp add --transport http agency-os https://<your-app>/api/mcp/assistant \

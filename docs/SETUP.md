@@ -241,7 +241,7 @@ as a `?key=` query parameter:
 | Endpoint | What it exposes |
 |---|---|
 | `/api/mcp` | **Ledger** — read and propose only: the plan, capacity, attention, requests, simulations, and parking a capture in the Inbox. |
-| `/api/mcp/assistant` | **Assistant** — the in-app assistant's full DIRECT toolset: everything above plus create/change work, timers, blackouts, recurrences, report drafts. The fence travels with it: nothing here can set a priority, promise a date, approve/decline a request, publish, archive or delete — those stay your tap in the app. |
+| `/api/mcp/assistant` | **The whole app** — the in-app assistant's full DIRECT toolset (sight of everything, create/change work, timers, blackouts, recurrences, report drafts), the remaining reads (settings, inbox, cron health, AI usage), **and** the operator decisions: `set_priority`, `set_committed_date`, `approve_request`, `decline_request`, `publish_update`, `archive_client`, `delete_task`. Decisions exist only on this endpoint (the secret IS your credential), every one requires `confirm: true`, may only be called when you explicitly asked, and is audited like a tap in the app. The one thing not writable from anywhere but Settings: the shape of your day. |
 
 **Claude Code** (terminal or desktop):
 
