@@ -13,8 +13,10 @@
  *   · everything runs through the same data-layer operations the UI uses,
  *     so every decision is audited exactly as if it were tapped in the app.
  *
- * The one deliberate exception: the shape of the day (zones, hours) still
- * changes only in Settings. It is readable here, not writable.
+ * The rest of the app's operations — settings writes, the update editor,
+ * the inbox, work-detail fields, client management edges — live in
+ * fullAccessTools.ts, registered on the same endpoint. Between the two
+ * files, everything the app can do, MCP can do.
  */
 
 import { z } from 'zod';
@@ -34,14 +36,14 @@ import { recordAudit } from '@/lib/audit';
 import { CHARGE_CURRENCIES, CLIENT_COLORS } from '@/data/types';
 import { MODES, type WorkMode } from '@/engines/planner/types';
 
-const PRIORITY_WORDS: Record<string, number> = { critical: 1, high: 2, normal: 3, low: 4 };
+export const PRIORITY_WORDS: Record<string, number> = { critical: 1, high: 2, normal: 3, low: 4 };
 
-const CONFIRM_NOTE =
+export const CONFIRM_NOTE =
   'OPERATOR DECISION. Call this ONLY when the operator explicitly asked for exactly '
   + 'this action in their own words — never on your own initiative, never inferred. '
   + 'Pass confirm: true to state that.';
 
-function text(value: unknown) {
+export function text(value: unknown) {
   return {
     content: [{
       type: 'text' as const,
@@ -50,15 +52,15 @@ function text(value: unknown) {
   };
 }
 
-function error(message: string) {
+export function error(message: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
 }
 
-const notConfirmed = () => text({
+export const notConfirmed = () => text({
   refused: 'This is an operator decision. Ask the operator, and call again with confirm: true only if they explicitly said to do it.',
 });
 
-async function guarded(fn: () => Promise<unknown>) {
+export async function guarded(fn: () => Promise<unknown>) {
   try {
     return text(await fn());
   } catch (e) {
@@ -73,7 +75,7 @@ export function registerOperatorTools(server: McpServer): void {
   /* ── The remaining reads, so the whole app is on MCP ─────────────── */
 
   server.registerTool('get_settings', {
-    description: 'The shape of the working day: zones per weekday, working hours and caps, upcoming blackouts, notification switches. Read-only — the day changes in Settings only.',
+    description: 'The shape of the working day: zones per weekday (with their ids), working hours and caps, upcoming blackouts, notification switches. Change it with add_zone / update_zone / remove_zone / set_working_hours / set_notification.',
     inputSchema: {},
   }, async () => guarded(async () => {
     const [zones, hours, blackouts, notify] = await Promise.all([

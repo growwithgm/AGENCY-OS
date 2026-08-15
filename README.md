@@ -81,16 +81,19 @@ connectors — the secret as a path segment:
 
 - `/api/mcp` — read and propose only (the plan, capacity, attention,
   simulations, park a capture in the Inbox).
-- `/api/mcp/assistant` — the whole app for Claude Code, claude.ai (custom
-  connector), or the API's MCP connector: the in-app assistant's full
-  toolset, the remaining reads (settings, inbox, cron health, AI usage),
-  the operator decisions (priority, committed dates, approve/decline,
-  publish, archive, delete), and client management (create a client,
-  create/reset a portal login — the one-time password comes back in the
-  conversation — disable a login). Decisions live only here — the secret
-  is the operator's own credential — and each one requires an explicit
-  `confirm: true` on the operator's say-so, audited like a tap in the app.
-  The in-app assistant stays fenced exactly as before.
+- `/api/mcp/assistant` — the whole app, A to Z, for Claude Code, claude.ai
+  (custom connector), or the API's MCP connector: the in-app assistant's
+  full toolset, every read, and every operation a screen can perform —
+  work fields, statuses, pushes, charges, portal visibility, the update
+  editor (draft/edit/publish/correct), the Inbox (fill in/confirm/discard
+  captures), activity reverts, requests (approve/decline/ask a question),
+  the shape of the day (zones, working hours, notifications), recurrence,
+  and client management end to end (create/update/archive/delete a
+  client, create/reset/disable/remove portal logins — one-time passwords
+  come back in the conversation). Anything client-facing, day-redefining
+  or destructive requires an explicit `confirm: true` on the operator's
+  say-so, audited like a tap in the app. The in-app assistant stays
+  fenced exactly as before.
 
 ```bash
 claude mcp add --transport http agency-os https://<your-app>/api/mcp/assistant \
