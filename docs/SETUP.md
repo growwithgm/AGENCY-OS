@@ -10,11 +10,15 @@ Supabase dashboard → **SQL Editor** → New query → paste the whole of
 [`supabase/schema.sql`](../supabase/schema.sql) → **Run**.
 
 That one file is everything: tables, functions, row level security, the
-portal projections and the seed data.
+portal projections and the seed data. **It is the only SQL file the
+project has, by rule** — every schema change lands in it, there is no
+migrations directory, and applying an update always means re-running the
+whole file.
 
 It works on a fresh project and on a database that already has an older
 schema in it — existing tables get their missing columns added and no data
-is dropped. It is idempotent, so re-running it later is safe.
+is dropped. It is idempotent, so re-running it after every update is the
+intended workflow, not a risk.
 
 Check it worked: **Table Editor** should now list `clients`, `tasks`,
 `day_zones`, `client_contacts`, `app_users` and the rest.

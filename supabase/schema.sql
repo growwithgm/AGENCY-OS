@@ -1,15 +1,18 @@
 -- ═══════════════════════════════════════════════════════════════════
--- Ledger — complete database schema
+-- Agency OS — THE database schema. One file, by rule.
 --
--- Paste this whole file into the Supabase SQL editor and run it once.
+-- This is the only SQL file in the project. Every schema change is made
+-- HERE — never as a separate migration file — and applying a change means
+-- pasting this whole file into the Supabase SQL editor and running it
+-- again. There is no migrations directory to keep in step, by decision.
 --
--- Safe on both a fresh project and a database that already has the older
--- schema in it. `create table if not exists` skips a table that already
+-- That works because the file is idempotent end to end: safe on a fresh
+-- project and on a database that already has any older shape of the
+-- schema. `create table if not exists` skips a table that already
 -- exists, which would silently leave it missing every new column — so
 -- every table is followed by `add column if not exists` for its full
--- shape, and the old single due date is migrated across.
---
--- Idempotent: re-running changes nothing and destroys nothing.
+-- shape, views are dropped and recreated, and re-running changes nothing
+-- and destroys nothing.
 --
 -- What it sets up:
 --   1.  Identity helpers read from the JWT

@@ -68,7 +68,7 @@ npm run build
 Two checks worth running against a real database:
 
 ```bash
-psql -d <db> -f supabase/schema.sql                    # idempotent, safe to re-run
+psql -d <db> -f supabase/schema.sql    # THE schema — one file, no migrations; re-run after every change
 psql -d <db> -f scripts/verify-portal-isolation.sql    # proves a client sees only their own
 ```
 
