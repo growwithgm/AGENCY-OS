@@ -72,6 +72,27 @@ psql -d <db> -f supabase/schema.sql                    # idempotent, safe to re-
 psql -d <db> -f scripts/verify-portal-isolation.sql    # proves a client sees only their own
 ```
 
+## Connect Claude (MCP)
+
+Two MCP endpoints, both guarded by `MCP_SECRET` (header `x-mcp-secret`,
+`Authorization: Bearer`, or `?key=` for URL-only clients):
+
+- `/api/mcp` — read and propose only (the plan, capacity, attention,
+  simulations, park a capture in the Inbox).
+- `/api/mcp/assistant` — the in-app assistant's full DIRECT toolset, so
+  Claude Code, claude.ai (custom connector), or the API's MCP connector
+  can work the system directly. The fence travels with it: priority,
+  committed dates, approving requests, publishing, archiving and deleting
+  are structurally absent — those stay the operator's tap in the app.
+
+```bash
+claude mcp add --transport http agency-os https://<your-app>/api/mcp/assistant \
+  --header "x-mcp-secret: <MCP_SECRET>"
+```
+
+Full per-client setup (claude.ai connector URL form, Claude API
+`mcp_servers` snippet): [docs/SETUP.md](docs/SETUP.md) §8.
+
 ## Cron (cron-job.org)
 
 Five scheduled jobs keep the system honest: nightly replan, the morning

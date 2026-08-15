@@ -228,3 +228,51 @@ still on the screens themselves.
 the day on screen is not the shape of your real day, change the zones
 rather than working around them — everything the product says about
 capacity rests on them being true.
+
+---
+
+## 8. Connect Claude (MCP)
+
+Agency OS speaks MCP on two endpoints, both authenticated with
+`MCP_SECRET` — sent as the `x-mcp-secret` header, as an
+`Authorization: Bearer` token, or (for clients that can only pass a URL)
+as a `?key=` query parameter:
+
+| Endpoint | What it exposes |
+|---|---|
+| `/api/mcp` | **Ledger** — read and propose only: the plan, capacity, attention, requests, simulations, and parking a capture in the Inbox. |
+| `/api/mcp/assistant` | **Assistant** — the in-app assistant's full DIRECT toolset: everything above plus create/change work, timers, blackouts, recurrences, report drafts. The fence travels with it: nothing here can set a priority, promise a date, approve/decline a request, publish, archive or delete — those stay your tap in the app. |
+
+**Claude Code** (terminal or desktop):
+
+```bash
+claude mcp add --transport http agency-os https://<your-app>/api/mcp/assistant \
+  --header "x-mcp-secret: <MCP_SECRET>"
+```
+
+**claude.ai → Settings → Connectors → Add custom connector.** The form
+takes a URL only, so put the secret in the query string:
+
+```
+https://<your-app>/api/mcp/assistant?key=<MCP_SECRET>
+```
+
+Treat that URL as the secret it contains — anyone holding it can use the
+tools. Rotate `MCP_SECRET` if it leaks.
+
+**Claude API** (MCP connector, beta `mcp-client-2025-11-20`):
+
+```json
+{
+  "mcp_servers": [{
+    "type": "url",
+    "name": "agency-os",
+    "url": "https://<your-app>/api/mcp/assistant",
+    "authorization_token": "<MCP_SECRET>"
+  }],
+  "tools": [{ "type": "mcp_toolset", "mcp_server_name": "agency-os" }]
+}
+```
+
+Use `/api/mcp` instead of `/api/mcp/assistant` in any of the above when
+you want a connection that can look but never touch.
