@@ -240,7 +240,9 @@ capacity rests on them being true.
 Agency OS speaks MCP on two endpoints, both authenticated with
 `MCP_SECRET` — sent as the `x-mcp-secret` header, as an
 `Authorization: Bearer` token, or (for clients that can only pass a URL)
-as a `?key=` query parameter:
+as a path segment: `/api/mcp/assistant/<MCP_SECRET>`. A `?key=` query
+parameter also works, but prefer the path form for URL-only clients —
+some drop the query string on derived requests:
 
 | Endpoint | What it exposes |
 |---|---|
@@ -255,14 +257,18 @@ claude mcp add --transport http agency-os https://<your-app>/api/mcp/assistant \
 ```
 
 **claude.ai → Settings → Connectors → Add custom connector.** The form
-takes a URL only, so put the secret in the query string:
+takes a URL only, so put the secret in the URL — **as a path segment**,
+not a query string (claude.ai drops query strings on some derived
+requests, gets a 401, then goes hunting for an OAuth sign-in service and
+fails with "Couldn't register with …'s sign-in service"):
 
 ```
-https://<your-app>/api/mcp/assistant?key=<MCP_SECRET>
+https://<your-app>/api/mcp/assistant/<MCP_SECRET>
 ```
 
-Treat that URL as the secret it contains — anyone holding it can use the
-tools. Rotate `MCP_SECRET` if it leaks.
+Leave the connector's OAuth Client ID field empty — the URL is the whole
+credential. Treat that URL as the secret it contains — anyone holding it
+can use the tools. Rotate `MCP_SECRET` if it leaks and paste the new URL.
 
 **Claude API** (MCP connector, beta `mcp-client-2025-11-20`):
 

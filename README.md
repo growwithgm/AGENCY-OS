@@ -75,7 +75,9 @@ psql -d <db> -f scripts/verify-portal-isolation.sql    # proves a client sees on
 ## Connect Claude (MCP)
 
 Two MCP endpoints, both guarded by `MCP_SECRET` (header `x-mcp-secret`,
-`Authorization: Bearer`, or `?key=` for URL-only clients):
+`Authorization: Bearer`, or — for URL-only clients like claude.ai custom
+connectors — the secret as a path segment:
+`/api/mcp/assistant/<MCP_SECRET>`):
 
 - `/api/mcp` — read and propose only (the plan, capacity, attention,
   simulations, park a capture in the Inbox).

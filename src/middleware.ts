@@ -26,12 +26,27 @@ const PUBLIC_PREFIXES = [
 
 const PORTAL_PREFIX = '/portal';
 
+/**
+ * OAuth probe paths an MCP client (claude.ai custom connectors) tries when
+ * a request of its gets a 401: metadata discovery, then the spec's default
+ * authorization endpoints. This server does not do OAuth — its MCP auth is
+ * the shared secret — so these must answer 404, plainly. Redirecting them
+ * to the login page (what the operator-surface fallback used to do) made
+ * claude.ai believe a sign-in service exists and try to register with it:
+ * "Couldn't register with …'s sign-in service".
+ */
+const OAUTH_PROBE_PREFIXES = ['/.well-known/oauth', '/register', '/authorize', '/token'];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // The health check answers "why is this not working?", so it has to be
   // reachable precisely when nothing else is.
   if (pathname.startsWith('/api/health')) return NextResponse.next();
+
+  if (OAUTH_PROBE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`) || pathname.startsWith(`${p}-`))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
 
   // Configuration is checked next: without Supabase credentials there is
   // no session to read, and every route would fail in a confusing way.
