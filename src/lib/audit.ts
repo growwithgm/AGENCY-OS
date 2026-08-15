@@ -19,6 +19,7 @@ export type AuditEventType =
   | 'work_unpinned'
   | 'blackout_added'
   | 'blackout_removed'
+  | 'charge_changed'
   | 'recurrence_created'
   | 'request_approved'
   | 'request_declined'

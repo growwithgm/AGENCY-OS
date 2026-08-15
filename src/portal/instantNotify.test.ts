@@ -24,3 +24,19 @@ describe('instant notify emails', () => {
     expect(body).toContain('https://app.example/portal');
   });
 });
+
+describe('money formatting for charges', () => {
+  it('renders whole amounts without cents and fractional ones with them', async () => {
+    const { money } = await import('@/lib/format');
+    expect(money(150, 'USD')).toBe('$150');
+    expect(money(99.5, 'EUR')).toBe('€99.50');
+  });
+
+  it('never throws on an unknown or malformed currency', async () => {
+    const { money } = await import('@/lib/format');
+    // A well-formed but unknown code renders through Intl (NBSP separator).
+    expect(money(1200, 'XYZ').replace(/ /g, ' ')).toBe('XYZ 1,200');
+    // A malformed code would make Intl throw — the fallback catches it.
+    expect(money(50, '??')).toBe('50 ??');
+  });
+});

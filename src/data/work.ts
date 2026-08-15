@@ -20,7 +20,8 @@ const WORK_COLUMNS =
   'id, client_id, project_id, title, client_title, description, status, priority, '
   + 'est_minutes, actual_minutes, client_requested_date, internal_target, committed_date, '
   + 'client_visible, work_type, slid_count, blocked_reason, origin, recurrence_rule_id, '
-  + 'source_request_id, created_at, completed_at, mode, safe_minutes, is_touchpoint';
+  + 'source_request_id, created_at, completed_at, mode, safe_minutes, is_touchpoint, '
+  + 'charge_amount, charge_currency';
 
 export async function listWork(
   db: SupabaseClient,
@@ -69,6 +70,9 @@ export type CreateWorkInput = {
   isTouchpoint?: boolean;
   /** Why this beats the reference class, when it does. */
   estimateReason?: string | null;
+  /** What the client pays — shows on their portal once the work is visible. */
+  chargeAmount?: number | null;
+  chargeCurrency?: string | null;
 };
 
 export async function createWork(db: SupabaseClient, input: CreateWorkInput): Promise<WorkRow> {
@@ -97,6 +101,8 @@ export async function createWork(db: SupabaseClient, input: CreateWorkInput): Pr
     mode,
     safe_minutes: safe,
     is_touchpoint: input.isTouchpoint ?? false,
+    charge_amount: input.chargeAmount ?? null,
+    charge_currency: input.chargeCurrency ?? 'USD',
     status: 'backlog',
   }).select(WORK_COLUMNS).single<WorkRow>();
 
@@ -142,6 +148,8 @@ export type UpdateWorkInput = {
   blockedReason?: string | null;
   mode?: WorkMode;
   safeMinutes?: number | null;
+  chargeAmount?: number | null;
+  chargeCurrency?: string | null;
 };
 
 export async function updateWork(
@@ -168,6 +176,8 @@ export async function updateWork(
   if (input.blockedReason !== undefined) patch.blocked_reason = input.blockedReason;
   if (input.mode !== undefined) patch.mode = input.mode;
   if (input.safeMinutes !== undefined) patch.safe_minutes = input.safeMinutes;
+  if (input.chargeAmount !== undefined) patch.charge_amount = input.chargeAmount;
+  if (input.chargeCurrency !== undefined) patch.charge_currency = input.chargeCurrency;
 
   // A new estimate or a new mode changes what may honestly be promised.
   if (input.safeMinutes === undefined
@@ -197,6 +207,18 @@ export async function updateWork(
       actor,
       before: { est_minutes: before.est_minutes },
       after: { est_minutes: input.estMinutes },
+    });
+  }
+
+  // Money the client will read deserves its own audit line.
+  if (input.chargeAmount !== undefined && input.chargeAmount !== before.charge_amount) {
+    await recordAudit({
+      type: 'charge_changed',
+      subjectTable: 'tasks',
+      subjectId: id,
+      actor,
+      before: { charge_amount: before.charge_amount, charge_currency: before.charge_currency },
+      after: { charge_amount: input.chargeAmount, charge_currency: input.chargeCurrency ?? before.charge_currency },
     });
   }
 

@@ -54,8 +54,14 @@ export type WorkRow = {
   source_request_id: string | null;
   created_at: string;
   completed_at: string | null;
+  /** What this work costs the client — deliberately client-facing. */
+  charge_amount: number | null;
+  charge_currency: string | null;
   clients?: { name: string } | null;
 };
+
+/** The currencies the operator can charge in. One list, every surface. */
+export const CHARGE_CURRENCIES = ['USD', 'EUR', 'GBP', 'PKR', 'AED'] as const;
 
 export type ClientRow = {
   id: string;

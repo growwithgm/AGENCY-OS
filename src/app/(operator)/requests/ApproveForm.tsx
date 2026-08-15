@@ -1,12 +1,12 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { MODE_LABELS, PRIORITY_LABELS } from '@/data/types';
+import { CHARGE_CURRENCIES, MODE_LABELS, PRIORITY_LABELS } from '@/data/types';
 import { MODES, type WorkMode } from '@/engines/planner/types';
-import { hm, shortDate } from '@/lib/format';
+import { hm, money, shortDate } from '@/lib/format';
 import { approveRequestAction, type ApproveState } from './actions';
 
-type Item = { title: string; minutes: string; mode: WorkMode | '' };
+type Item = { title: string; minutes: string; mode: WorkMode | ''; charge: string };
 
 /**
  * The approval. Priority starts empty and stays empty until the operator
@@ -28,10 +28,12 @@ export function ApproveForm({
 }) {
   const [state, action, pending] = useActionState<ApproveState, FormData>(approveRequestAction, {});
   const [priority, setPriority] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<string>('USD');
   const [items, setItems] = useState<Item[]>([{
     title: defaultTitle,
     minutes: suggestedMinutes ? String(suggestedMinutes) : '',
     mode: confirmedMode ?? '',
+    charge: '',
   }]);
 
   const patch = (index: number, change: Partial<Item>) =>
@@ -109,14 +111,47 @@ export function ApproveForm({
                 ))}
               </select>
             </div>
+
+            <div className="field" style={{ flex: '1 1 150px' }}>
+              <label className="label" htmlFor={`charge-${index}`}>Charges (optional)</label>
+              <input
+                id={`charge-${index}`}
+                name="item_charge"
+                className="input num"
+                type="number"
+                min={0}
+                step="0.01"
+                value={item.charge}
+                onChange={(e) => patch(index, { charge: e.target.value })}
+                placeholder="0"
+              />
+              <span className="tiny dim">
+                {Number(item.charge) > 0
+                  ? <>They will see <span className="num">{money(Number(item.charge), currency)}</span> once approved.</>
+                  : 'Leave empty for no charge shown.'}
+              </span>
+            </div>
           </div>
         </div>
       ))}
 
+      <div className="field" style={{ maxWidth: 220 }}>
+        <label className="label" htmlFor="charge_currency">Charge currency</label>
+        <select
+          id="charge_currency"
+          name="charge_currency"
+          className="input"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+        >
+          {CHARGE_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+        </select>
+      </div>
+
       <button
         type="button"
         className="btn btn--sm"
-        onClick={() => setItems((prev) => [...prev, { title: '', minutes: '', mode: confirmedMode ?? '' }])}
+        onClick={() => setItems((prev) => [...prev, { title: '', minutes: '', mode: confirmedMode ?? '', charge: '' }])}
         style={{ alignSelf: 'flex-start' }}
       >
         + Split into another item

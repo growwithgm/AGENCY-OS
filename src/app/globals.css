@@ -1042,6 +1042,17 @@ body:has(.cp-app) { background: var(--ground-portal); }
 
 .cp-main { min-width: 0; }
 
+/* The price line under a task title on the portal. */
+.cp-task-charge {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--navy) 75%, #000);
+}
+.cp-task-charge strong {
+  font-family: var(--font-mono-stack);
+  font-weight: 600;
+}
+
 .cp-topbar {
   height: 68px;
   display: flex;

@@ -6,6 +6,7 @@ import { requireOperator } from '@/lib/auth';
 import { convertRequest, declineRequest, getRequest, returnForInfo } from '@/data/requests';
 import { createWork, updateWork } from '@/data/work';
 import { refreshSignals } from '@/data/attention';
+import { CHARGE_CURRENCIES } from '@/data/types';
 import { MODES, type WorkMode } from '@/engines/planner/types';
 
 /**
@@ -26,13 +27,14 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : 'That did not save. Nothing was changed.';
 }
 
-type ApprovedItem = { title: string; estMinutes: number; mode: WorkMode };
+type ApprovedItem = { title: string; estMinutes: number; mode: WorkMode; chargeAmount: number | null };
 
 /** The rows of a split arrive as parallel lists, in the order they appear. */
 function readItems(form: FormData): ApprovedItem[] | string {
   const titles = form.getAll('item_title').map(String);
   const estimates = form.getAll('item_est').map(String);
   const modes = form.getAll('item_mode').map(String);
+  const charges = form.getAll('item_charge').map(String);
 
   const items: ApprovedItem[] = [];
   for (let i = 0; i < titles.length; i++) {
@@ -49,7 +51,19 @@ function readItems(form: FormData): ApprovedItem[] | string {
       return `"${title}" needs a mode — the kind of hour it will actually take.`;
     }
 
-    items.push({ title, estMinutes: Math.round(estMinutes), mode });
+    // A charge is optional; when present it must be a real, non-negative
+    // number — the client reads it verbatim.
+    const chargeRaw = (charges[i] ?? '').trim();
+    let chargeAmount: number | null = null;
+    if (chargeRaw !== '') {
+      const parsed = Number(chargeRaw);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return `"${title}" has a charge that is not a number.`;
+      }
+      chargeAmount = parsed > 0 ? Math.round(parsed * 100) / 100 : null;
+    }
+
+    items.push({ title, estMinutes: Math.round(estMinutes), mode, chargeAmount });
   }
 
   return items.length ? items : 'Give the work a title before approving it.';
@@ -78,6 +92,10 @@ export async function approveRequestAction(_prev: ApproveState, form: FormData):
   const internalTarget = text(form, 'internal_target') ?? null;
   const committedDate = text(form, 'committed_date') ?? null;
   const clientVisible = form.get('client_visible') === 'on';
+  const currencyRaw = text(form, 'charge_currency') ?? 'USD';
+  const chargeCurrency = (CHARGE_CURRENCIES as readonly string[]).includes(currencyRaw)
+    ? currencyRaw
+    : 'USD';
   const [lead, ...extra] = parsed;
 
   let workId: string;
@@ -96,8 +114,12 @@ export async function approveRequestAction(_prev: ApproveState, form: FormData):
       actor: session.email,
     });
 
-    // convertRequest carries no mode, so the confirmed one is written straight after.
-    await updateWork(supabase, workId, { mode: lead.mode }, session.email);
+    // convertRequest carries no mode or charge, so both are written straight after.
+    await updateWork(supabase, workId, {
+      mode: lead.mode,
+      chargeAmount: lead.chargeAmount,
+      chargeCurrency,
+    }, session.email);
 
     // Converting closes the request, so it can only be done once. The rest of
     // a split becomes work in its own right, tagged with the same origin.
@@ -115,6 +137,8 @@ export async function approveRequestAction(_prev: ApproveState, form: FormData):
         clientVisible,
         origin: 'client_request',
         sourceRequestId: request.id,
+        chargeAmount: item.chargeAmount,
+        chargeCurrency,
       });
     }
   } catch (error) {

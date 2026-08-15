@@ -14,13 +14,13 @@ import { effortFor, estimateHistoryFor, getWork, referenceClassFor } from '@/dat
 import { ReferenceClass } from '@/components/ReferenceClass';
 import { getClient, listClients } from '@/data/clients';
 import { listActivity, type ActivityEntry } from '@/data/activity';
-import { hm, hmSigned, relativePhrase, shortDate } from '@/lib/format';
+import { hm, hmSigned, money, relativePhrase, shortDate } from '@/lib/format';
 import { ClientName, ModeChip, PriorityMark, StatusChip } from '@/components/marks';
 import { Reassign } from './Reassign';
-import { MODE_LABELS, PRIORITY_LABELS, STATUS_LABELS } from '@/data/types';
+import { CHARGE_CURRENCIES, MODE_LABELS, PRIORITY_LABELS, STATUS_LABELS } from '@/data/types';
 import type { WorkMode, WorkStatus } from '@/data/types';
 import {
-  completeWorkAction, pushWorkAction, setClientTitleAction, setCommittedDateAction,
+  completeWorkAction, pushWorkAction, setChargeAction, setClientTitleAction, setCommittedDateAction,
   setEstimateAction, setInternalTargetAction, setModeAction, setPriorityAction,
   setRequestedDateAction, setStatusAction, setVisibilityAction, startWorkAction,
 } from './actions';
@@ -287,6 +287,34 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ id:
             shorthand.
           </p>
           <div><button type="submit" className="btn btn--sm">Save wording</button></div>
+        </form>
+
+        <form action={setChargeAction} className="stack" style={{ gap: 6 }}>
+          <input type="hidden" name="work_id" value={work.id} />
+          <div className="row" style={{ gap: 8 }}>
+            <div className="field" style={{ flex: '1 1 150px' }}>
+              <label className="label" htmlFor="charge_amount">Charges</label>
+              <input
+                id="charge_amount" name="charge_amount" type="number" min={0} step="0.01"
+                defaultValue={work.charge_amount ?? ''} className="input num" placeholder="No charge"
+              />
+            </div>
+            <div className="field" style={{ flex: '0 1 120px' }}>
+              <label className="label" htmlFor="charge_currency">Currency</label>
+              <select
+                id="charge_currency" name="charge_currency" className="input"
+                defaultValue={work.charge_currency ?? 'USD'}
+              >
+                {CHARGE_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+              </select>
+            </div>
+          </div>
+          <p className="tiny dim">
+            {work.charge_amount !== null
+              ? <>They currently see <span className="num">{money(Number(work.charge_amount), work.charge_currency)}</span> on this item{work.client_visible ? '' : ' — once you make it visible'}.</>
+              : 'The price of this work, as the client reads it. Empty means no charge is shown.'}
+          </p>
+          <div><button type="submit" className="btn btn--sm">Save charges</button></div>
         </form>
 
         <Reassign

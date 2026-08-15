@@ -621,6 +621,8 @@ async function getWorkTool(ctx: ToolContext, id: string): Promise<ToolResult> {
       client_visible: work.client_visible,
       slid_count: work.slid_count,
       blocked_reason: work.blocked_reason,
+      charge_amount: work.charge_amount,
+      charge_currency: work.charge_amount !== null ? work.charge_currency : null,
     },
   };
 }

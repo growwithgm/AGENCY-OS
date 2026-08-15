@@ -13,6 +13,7 @@
 
 import Link from 'next/link';
 import { requireClient } from '@/lib/auth';
+import { money } from '@/lib/format';
 import { COPY } from '@/portal/copy';
 import { RequestFlow } from './request/RequestFlow';
 import { answerFollowUpAction } from './request/actions';
@@ -24,6 +25,9 @@ type VisibleWork = {
   title: string;
   client_status: 'done' | 'in_progress' | 'waiting' | 'upcoming';
   committed_date: string | null;
+  /** The price the agency set — shows only once the work is visible here. */
+  charge_amount: number | null;
+  charge_currency: string | null;
   completed_at: string | null;
   created_at: string;
 };
@@ -40,7 +44,7 @@ export default async function PortalHome() {
   // date cannot be reached even by calling the API directly (INV-8).
   const [workRes, updatesRes, requestsRes, clientRes] = await Promise.all([
     supabase.from('client_visible_work')
-      .select('id, title, client_status, committed_date, completed_at, created_at')
+      .select('id, title, client_status, committed_date, charge_amount, charge_currency, completed_at, created_at')
       .order('created_at', { ascending: false }),
     supabase.from('client_published_updates')
       .select('id, body_md, published_at, period_start, period_end')
@@ -198,6 +202,11 @@ export default async function PortalHome() {
                           {statusPill(item.client_status)}
                           {isNew(item.created_at) && <span className="portal-new">{say.newLabel}</span>}
                         </div>
+                        {item.charge_amount !== null && (
+                          <div className="cp-task-charge">
+                            {say.charges}: <strong>{money(Number(item.charge_amount), item.charge_currency)}</strong>
+                          </div>
+                        )}
                       </div>
                       {/* A date appears ONLY when one was committed to. */}
                       {item.committed_date && (
@@ -300,17 +309,23 @@ export default async function PortalHome() {
                     <tr>
                       <th>{say.shell.colTask}</th>
                       <th>{say.shell.colCompleted}</th>
+                      <th>{say.charges}</th>
                       <th>{say.shell.colStatus}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {completed.length === 0 && (
-                      <tr><td colSpan={3}><span className="portal-empty">{say.shell.noneCompleted}</span></td></tr>
+                      <tr><td colSpan={4}><span className="portal-empty">{say.shell.noneCompleted}</span></td></tr>
                     )}
                     {completed.map((item) => (
                       <tr key={item.id}>
                         <td className="cp-task-title">{item.title}</td>
                         <td className="portal-status">{day(item.completed_at)}</td>
+                        <td className="portal-status">
+                          {item.charge_amount !== null
+                            ? money(Number(item.charge_amount), item.charge_currency)
+                            : '—'}
+                        </td>
                         <td><span className="cp-pill cp-pill--done">{say.shell.done}</span></td>
                       </tr>
                     ))}

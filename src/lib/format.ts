@@ -40,6 +40,26 @@ export function hmShort(minutes: number): string {
   return `${m}m`;
 }
 
+/**
+ * A charge, as the client reads it: `$150`, `€99.50`, `Rs 12,000`.
+ * Whole amounts drop the cents; an unknown currency falls back to a plain
+ * `AMOUNT CODE` rather than throwing on someone's invoice.
+ */
+export function money(amount: number, currency: string | null): string {
+  const code = (currency ?? 'USD').toUpperCase();
+  const fractionDigits = Number.isInteger(amount) ? 0 : 2;
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(amount);
+  } catch {
+    return `${amount.toLocaleString('en-US')} ${code}`;
+  }
+}
+
 export function todayKey(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }

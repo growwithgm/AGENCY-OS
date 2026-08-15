@@ -7,7 +7,7 @@ import { refreshSignals } from '@/data/attention';
 import { logActivity } from '@/data/activity';
 import { recordAudit } from '@/lib/audit';
 import type { WorkMode, WorkStatus } from '@/data/types';
-import { MODE_LABELS } from '@/data/types';
+import { CHARGE_CURRENCIES, MODE_LABELS } from '@/data/types';
 
 function value(form: FormData, key: string): string | undefined {
   const raw = form.get(key);
@@ -221,6 +221,43 @@ export async function setEstimateAction(form: FormData) {
   });
 
   await refreshSignals(supabase);
+  await refreshWorkViews(id);
+}
+
+/**
+ * The price of this work, as the client will read it. Empty clears it —
+ * no charge shown. The portal shows it only while the item is visible
+ * there, so nothing about money reaches a client before approval.
+ */
+export async function setChargeAction(form: FormData) {
+  const { session, supabase } = await requireOperator();
+  const id = requireId(form);
+
+  const raw = value(form, 'charge_amount');
+  let amount: number | null = null;
+  if (raw) {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) throw new Error('the charge must be a number');
+    amount = parsed > 0 ? Math.round(parsed * 100) / 100 : null;
+  }
+
+  const currencyRaw = value(form, 'charge_currency') ?? 'USD';
+  const currency = (CHARGE_CURRENCIES as readonly string[]).includes(currencyRaw)
+    ? currencyRaw
+    : 'USD';
+
+  const before = await getWork(supabase, id);
+  await updateWork(supabase, id, { chargeAmount: amount, chargeCurrency: currency }, session.email);
+
+  await logActivity({
+    actor: 'operator',
+    action: 'work.charge_changed',
+    entityType: 'tasks',
+    entityId: id,
+    before: { charge_amount: before?.charge_amount ?? null, charge_currency: before?.charge_currency ?? null },
+    after: { charge_amount: amount, charge_currency: currency },
+  });
+
   await refreshWorkViews(id);
 }
 

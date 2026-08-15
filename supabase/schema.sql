@@ -181,6 +181,10 @@ alter table tasks add column if not exists completed_at          timestamptz;
 alter table tasks add column if not exists mode                  text not null default 'operational';
 alter table tasks add column if not exists safe_minutes          int;
 alter table tasks add column if not exists is_touchpoint         boolean not null default false;
+-- What this work costs the client, set by the operator. Deliberately
+-- client-facing: it appears on the portal once the work is visible there.
+alter table tasks add column if not exists charge_amount         numeric(10,2);
+alter table tasks add column if not exists charge_currency       text default 'USD';
 
 -- The structure of a day: named windows, each permitting certain modes.
 -- A zone may cross midnight (end_time < start_time); it belongs to the
@@ -738,6 +742,10 @@ select
   -- the operator actually made. internal_target and est_minutes are not
   -- columns of this view at all, so no query can reach them.
   t.committed_date,
+  -- The charge is deliberately client-facing: the operator set it as the
+  -- price of this work, and it shows once the work is visible here.
+  t.charge_amount,
+  case when t.charge_amount is not null then t.charge_currency end as charge_currency,
   t.completed_at,
   t.created_at
 from tasks t

@@ -27,6 +27,7 @@ export const COPY = {
   yesterday: 'Yesterday',
   account: 'Your account',
   signOut: 'Sign out',
+  charges: 'Charges',
   daysAgo: (n: number) => `${n} days ago`,
   requestState: (state: string) => ({
     clarifying: 'We have a question',
